@@ -128,6 +128,29 @@ with sync_playwright() as pw:
         falla("volvió a ofrecer importar después de haberlo hecho")
     ok("no vuelve a ofrecer la importación")
 
+    # 3b. Un pendiente de la semana llega a la nube.
+    page.click('.tab[data-tab="semana"]')
+    page.fill("#tasksSemana .tarea-nueva input", "Pagar el alquiler")
+    page.keyboard.press("Enter")
+    lunes = page.evaluate("document.querySelector('#tasksSemana .tareas').dataset.week")
+    import time
+    llego = False
+    for _ in range(30):
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:8080/v1/projects/{PROYECTO}/databases/(default)/documents/users/{uid}/tasks/{lunes}",
+                headers={"Authorization": "Bearer owner"})
+            if "Pagar el alquiler" in urllib.request.urlopen(req).read().decode("utf-8"):
+                llego = True
+                break
+        except urllib.error.HTTPError:
+            pass
+        time.sleep(0.5)
+    if not llego:
+        falla("el pendiente no llegó a la nube")
+    ok("un pendiente de la semana se guarda en la nube")
+    page.click('.tab[data-tab="hoy"]')
+
     # 4. Sin conexión: marcar y que se suba al volver.
     ctx.set_offline(True)
     page.locator(".x-btn").nth(1).click()

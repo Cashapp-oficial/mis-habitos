@@ -57,6 +57,7 @@
     </div>
     <button type="button" id="goToday" class="chip" hidden>Volver a hoy</button>
     <div class="summary" id="summary"></div>
+    <div id="tasksHoy"></div>
     <div id="hoyList"></div>
   </section>
 
@@ -71,9 +72,25 @@
         <button type="button" id="nextWeek" class="icon-btn" aria-label="Semana siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
       </div>
     </div>
+    <div id="tasksSemana"></div>
     <p class="hint" id="weekSummary"></p>
     <div class="week-card vidrio" id="weekGrid"></div>
     <p class="hint">Tocá una celda para pasar de sin marcar a hecho, a no hecho y de nuevo a sin marcar.</p>
+  </section>
+
+  <section id="viewMes" class="view" hidden>
+    <div class="top">
+      <div class="top-text">
+        <p class="rotulo orn" id="monthEyebrow">Mes</p>
+        <h1 class="d" id="monthTitle"></h1>
+      </div>
+      <div class="nav-btns">
+        <button type="button" id="prevMonth" class="icon-btn" aria-label="Mes anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <button type="button" id="nextMonth" class="icon-btn" aria-label="Mes siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>
+    <button type="button" id="goThisMonth" class="chip" hidden>Volver a este mes</button>
+    <div id="monthBody"></div>
   </section>
 
   <section id="viewHabitos" class="view" hidden>
@@ -137,6 +154,7 @@
 <nav class="tabbar" id="tabbar" aria-label="Secciones">
   <button type="button" class="tab" data-tab="hoy" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg><span>Hoy</span></button>
   <button type="button" class="tab" data-tab="semana"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Semana</span></button>
+  <button type="button" class="tab" data-tab="mes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M7.5 13.5h.01M12 13.5h.01M16.5 13.5h.01M7.5 17h.01M12 17h.01"/></svg><span>Mes</span></button>
   <button type="button" class="tab" data-tab="habitos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg><span>Hábitos</span></button>
 </nav>
 

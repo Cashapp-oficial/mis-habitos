@@ -47,3 +47,4 @@ export function isValidDate(s) {
 export var fmtWd = new Intl.DateTimeFormat('es-AR', { weekday: 'long', timeZone: 'UTC' });
 export var fmtDay = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'long', timeZone: 'UTC' });
 export var fmtShort = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+export var fmtMonth = new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric', timeZone: 'UTC' });

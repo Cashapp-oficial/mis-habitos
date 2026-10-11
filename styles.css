@@ -380,6 +380,121 @@ table.week { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .week tfoot td, .week tfoot th { padding-top: 10px; border-top: 1px solid var(--linea); font: 500 10px var(--font-data); color: var(--apagado); font-variant-numeric: tabular-nums; }
 .week tfoot th { text-align: left; padding-left: 6px; letter-spacing: 0.08em; text-transform: uppercase; }
 
+/* ---------- Pendientes de la semana ---------- */
+
+.tareas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 18px 16px 14px; } /* sin el minmax, el campo estira la tarjeta */
+.tareas-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 4px 6px; }
+.tareas-cab h2 { display: flex; align-items: center; gap: 9px; font: 400 19px/1 var(--font-display); text-transform: uppercase; letter-spacing: 0.02em; }
+.tareas-cab h2::before { content: ""; width: 7px; height: 7px; border: 1.5px solid var(--verde); transform: rotate(45deg); }
+.tareas-lista { list-style: none; margin: 0; padding: 0; }
+.tarea { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 0 6px 4px; border-top: 1px solid var(--linea); }
+.tarea:first-child { border-top: 0; }
+.tarea-check {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  border: 2px solid var(--verde);
+  background: transparent;
+  color: var(--sobre-color);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+}
+.tarea-check svg { width: 17px; height: 17px; opacity: 0; transition: opacity 0.15s; }
+.hecha .tarea-check { background: var(--verde); }
+.hecha .tarea-check svg { opacity: 1; }
+.tarea-texto { font-weight: 500; overflow-wrap: anywhere; }
+.hecha .tarea-texto { color: var(--apagado); text-decoration: line-through; text-decoration-color: var(--linea-fuerte); }
+.tarea-borrar {
+  min-width: 40px;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--apagado);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tarea-borrar svg { width: 16px; height: 16px; }
+.tarea-borrar.armed { background: var(--rojo); color: var(--sobre-color); }
+@media (hover: hover) {
+  .tarea-borrar:not(.armed):hover { background: var(--capa-2); color: var(--texto); }
+}
+.tareas-vacio { padding: 2px 4px 8px; color: var(--apagado); font-size: 14px; }
+.tarea-nueva { display: flex; gap: 8px; margin-top: 8px; }
+.tarea-nueva .field { flex: 1; }
+.tareas-quedaron { display: grid; gap: 8px; margin: 0 0 8px; padding: 12px; border-radius: 14px; border: 1px solid rgba(255, 181, 71, 0.35); background: rgba(255, 181, 71, 0.08); }
+.tareas-quedaron p { color: var(--ambar); font-size: 14px; font-weight: 500; }
+.tareas-quedaron .btn { justify-self: start; height: 40px; }
+.tareas-ver { justify-self: start; margin: 6px 0 0 4px; padding: 6px 0; border: 0; background: none; color: var(--verde); font-size: 13px; font-weight: 600; cursor: pointer; }
+
+/* ---------- Mes: resumen, calendario y una tira por hábito ---------- */
+
+#monthBody { display: flex; flex-direction: column; gap: 14px; }
+.mes-resumen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.mes-resumen > div { display: grid; gap: 6px; padding: 14px 12px; border-radius: 18px; border: 1px solid var(--linea); background: var(--capa-2); }
+.mes-num {
+  font: 400 34px/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  background: repeating-linear-gradient(-58deg, #8fff1f 0 2.4px, #63c914 2.4px 3.4px);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.mes-num small { font-size: 18px; -webkit-text-fill-color: rgba(255, 255, 255, 0.45); }
+.mes-resumen .rotulo { font-size: 10px; letter-spacing: 0.08em; }
+
+.cal-tarjeta { padding: 16px 14px 14px; display: grid; gap: 8px; }
+.cal-cab, .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.cal-cab span { text-align: center; font: 500 10px var(--font-data); color: var(--apagado); letter-spacing: 0.06em; }
+.cal-dia {
+  aspect-ratio: 1;
+  min-width: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 1px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--linea);
+  background: var(--capa-2);
+  color: var(--texto);
+  cursor: pointer;
+}
+.cal-dia span { font: 500 13px/1 var(--font-data); font-variant-numeric: tabular-nums; }
+.cal-dia small { font: 500 8.5px/1 var(--font-data); opacity: 0.8; }
+.cal-dia:disabled { opacity: 0.3; cursor: default; background: transparent; }
+/* Cuatro niveles de verde según el porcentaje del día. */
+.n1 { background: rgba(143, 255, 31, 0.16); border-color: rgba(143, 255, 31, 0.22); }
+.n2 { background: rgba(143, 255, 31, 0.34); border-color: rgba(143, 255, 31, 0.4); }
+.n3 { background: rgba(143, 255, 31, 0.62); border-color: transparent; color: var(--sobre-color); }
+.n4 { background: var(--verde); border-color: var(--verde); color: var(--sobre-color); box-shadow: 0 0 14px rgba(143, 255, 31, 0.25); }
+.cal-dia.hoy { outline: 2px solid var(--texto); outline-offset: 1px; }
+.cal-leyenda { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 4px; font: 500 10px var(--font-data); color: var(--apagado); }
+.cal-leyenda i { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--linea); }
+.cal-leyenda i.n0 { background: var(--capa-2); }
+.cal-leyenda span { margin: 0 4px; }
+@media (hover: hover) {
+  .cal-dia:not(:disabled):hover { border-color: rgba(255, 255, 255, 0.4); }
+}
+
+.mes-cats { display: flex; flex-direction: column; gap: 14px; }
+.mes-habito { display: grid; gap: 8px; padding: 12px 16px 14px; border-top: 1px solid var(--linea); }
+.mes-habito-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.mes-habito-cab .h-name { min-width: 0; }
+.mes-habito-cab .count { flex: none; font-size: 12px; }
+.tira { display: flex; gap: 2px; }
+.tira i { flex: 1; min-width: 0; height: 16px; border-radius: 2px; background: var(--capa-3); }
+.tira i.done { background: var(--c); }
+.tira i.miss { background: repeating-linear-gradient(135deg, var(--apagado) 0 1px, transparent 1px 3px); }
+.tira i.fut { background: transparent; box-shadow: inset 0 0 0 1px var(--linea); }
+.tira i.cur { box-shadow: 0 0 0 1px var(--texto); }
+
 /* ---------- Editor, respaldo y cuenta ---------- */
 
 .field {
@@ -486,7 +601,7 @@ select.field option { background: #1b1b1d; color: var(--texto); }
   max-width: 448px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   padding: 8px;
   border-radius: 26px;
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02) 60%), rgba(17, 17, 18, 0.55);

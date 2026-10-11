@@ -62,3 +62,14 @@ test('la forma de los datos se respeta', async () => {
   await assertFails(setDoc(doc(db, 'users/alicia/logs/2026-10'), { days: {}, extra: true }));
   await assertFails(setDoc(doc(db, 'users/alicia/config/habits'), { items: 'no es lista' }));
 });
+
+test('pendientes de la semana: solo la dueña, con la forma correcta', async () => {
+  const a = alicia(), b = bruno();
+  await assertSucceeds(setDoc(doc(a, 'users/alicia/tasks/2026-10-05'), { items: [{ id: 't1', text: 'Llamar al dentista', done: false }] }));
+  await assertSucceeds(getDocs(collection(a, 'users/alicia/tasks')));
+  await assertSucceeds(deleteDoc(doc(a, 'users/alicia/tasks/2026-10-05')));
+  await assertFails(getDocs(collection(b, 'users/alicia/tasks')));
+  await assertFails(setDoc(doc(b, 'users/alicia/tasks/2026-10-05'), { items: [] }));
+  await assertFails(setDoc(doc(a, 'users/alicia/tasks/semana1'), { items: [] }));
+  await assertFails(setDoc(doc(a, 'users/alicia/tasks/2026-10-05'), { items: [], extra: 1 }));
+});

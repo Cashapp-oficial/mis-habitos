@@ -1,11 +1,11 @@
 /*
   Datos: funciones puras sobre la lista de hábitos y las marcas. No tocan la
-  pantalla ni la base, así se pueden probar y reusar (el gráfico mensual de
-  más adelante sale de monthStats).
+  pantalla ni la base, así se pueden probar y reusar (la vista Mes sale de monthStats).
 
   Forma de los datos:
     habits: [{ id, name, cat }]
     logs:   { "2026-10": { "2026-10-11": { idHabito: 1 | 0 } } }   1 = hecho, 0 = no hecho
+    tasks:  { "2026-10-06": [{ id, text, done }] }   pendientes, por el lunes de su semana
 */
 
 import { addDays, isValidDate, pad } from './fechas.js';
@@ -100,19 +100,59 @@ export function mergeData(base, incoming, prefer) {
       });
     });
   });
-  return { habits: habits, patch: patch, newHabits: newHabits, marks: marks };
+  // Pendientes: se suman los que faltan; si el mismo pendiente cambió, manda prefer.
+  var tasksPatch = {}, newTasks = 0;
+  var baseTasks = base.tasks || {}, incTasks = cleanTasks(incoming.tasks || {});
+  Object.keys(incTasks).forEach(function (w) {
+    var items = (baseTasks[w] || []).map(cleanTask), changed = false;
+    incTasks[w].forEach(function (t) {
+      var cur = items.find(function (x) { return x.id === t.id; });
+      if (!cur) { items.push(t); newTasks++; changed = true; }
+      else if (prefer === 'incoming' && (cur.text !== t.text || cur.done !== t.done)) { cur.text = t.text; cur.done = t.done; changed = true; }
+    });
+    if (changed) tasksPatch[w] = items;
+  });
+  return { habits: habits, patch: patch, newHabits: newHabits, marks: marks, tasksPatch: tasksPatch, newTasks: newTasks };
+}
+
+/* ---------- pendientes de la semana ---------- */
+
+export function validTask(t) {
+  return !!t && typeof t.id === 'string' && t.id.length > 0 && t.id.length <= 64 &&
+    typeof t.text === 'string' && t.text.trim().length > 0 && typeof t.done === 'boolean';
+}
+function cleanTask(t) { return { id: t.id, text: t.text.trim().slice(0, 140), done: t.done }; }
+
+/** Copia sin semanas vacías ni pendientes raros. */
+export function cleanTasks(tasks) {
+  var out = {};
+  Object.keys(tasks || {}).sort().forEach(function (w) {
+    if (!isValidDate(w) || !Array.isArray(tasks[w])) return;
+    var seen = {};
+    var items = tasks[w].filter(function (t) {
+      if (!validTask(t) || seen[t.id]) return false;
+      seen[t.id] = true;
+      return true;
+    }).map(cleanTask);
+    if (items.length) out[w] = items;
+  });
+  return out;
+}
+export function countTasks(tasks) {
+  return Object.keys(tasks).reduce(function (n, w) { return n + tasks[w].length; }, 0);
 }
 
 /* ---------- respaldo en archivo ---------- */
 
-export function makeBackup(habits, logs) {
+export function makeBackup(habits, logs, tasks) {
   return {
     app: 'mis-habitos',
     version: 1,
     exportedAt: new Date().toISOString(),
     timezone: 'America/Buenos_Aires',
     habits: habits.map(cleanHabit),
-    logs: cleanLogs(logs)
+    logs: cleanLogs(logs),
+    tasks: cleanTasks(tasks)
   };
 }
 
@@ -136,14 +176,14 @@ export function parseBackup(text) {
     seen[h.id] = true;
     return true;
   }).map(cleanHabit);
-  return { habits: habits, logs: cleanLogs(logs) };
+  return { habits: habits, logs: cleanLogs(logs), tasks: cleanTasks(data.tasks || {}) };
 }
 
-/* ---------- para más adelante: constancia mensual ---------- */
+/* ---------- constancia mensual (vista Mes) ---------- */
 
 /**
  * Por cada día del mes: cuántos hábitos se hicieron y el porcentaje sobre los
- * hábitos actuales. Base para el gráfico de constancia mensual.
+ * hábitos actuales. Lo usa la vista Mes.
  */
 export function monthStats(logs, habits, mk, today) {
   var p = mk.split('-').map(Number);

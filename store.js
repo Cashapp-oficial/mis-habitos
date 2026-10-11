@@ -11,10 +11,11 @@
   Dónde quedan en la nube:
     users/{uid}/config/habits   { items: [{ id, name, cat }] }
     users/{uid}/logs/{AAAA-MM}  { days: { "AAAA-MM-DD": { idHabito: 1 | 0 } } }
+    users/{uid}/tasks/{lunes}   { items: [{ id, text, done }] }   pendientes de esa semana
 */
 
 import { firebaseConfig } from './firebase-config.js';
-import { validHabit } from './datos.js';
+import { validHabit, cleanTasks } from './datos.js';
 
 var SDK = 'https://www.gstatic.com/firebasejs/12.19.0/';
 
@@ -36,13 +37,14 @@ export function readLocalData() {
       }
     });
   } catch (e) { /* sin almacenamiento local */ }
-  return { habits: habits, logs: logs };
+  var tasks = cleanTasks(lsGet('mh:tasks') || {});
+  return { habits: habits, logs: logs, tasks: tasks };
 }
 
 function localStore() {
   var data = readLocalData();
   var listener = null;
-  function emit() { if (listener) listener(data.habits, data.logs, { pending: false }); }
+  function emit() { if (listener) listener({ habits: data.habits, logs: data.logs, tasks: data.tasks }, { pending: false }); }
   function saveMonth(mk) {
     if (!lsSet('mh:logs:' + mk, { days: data.logs[mk] || {} })) throw new Error('local');
   }
@@ -66,7 +68,13 @@ function localStore() {
       else day[id] = v;
       try { saveMonth(mk); return Promise.resolve(); } catch (e) { return Promise.reject(e); }
     },
-    applyMerge: function (habits, patch) {
+    saveTasks: function (week, items) {
+      if (items.length) data.tasks[week] = items; else delete data.tasks[week];
+      return lsSet('mh:tasks', data.tasks) ? Promise.resolve() : Promise.reject(new Error('local'));
+    },
+    applyMerge: function (habits, patch, tasksPatch) {
+      Object.keys(tasksPatch || {}).forEach(function (w) { data.tasks[w] = tasksPatch[w]; });
+      lsSet('mh:tasks', data.tasks);
       data.habits = habits;
       lsSet('mh:habits', { items: habits });
       Object.keys(patch).forEach(function (mk) {
@@ -110,6 +118,7 @@ async function cloudStore() {
   var user = null, unsubs = [];
   function habitsRef() { return fs.doc(db, 'users', user.uid, 'config', 'habits'); }
   function monthRef(mk) { return fs.doc(db, 'users', user.uid, 'logs', mk); }
+  function weekRef(w) { return fs.doc(db, 'users', user.uid, 'tasks', w); }
 
   return {
     mode: 'cloud',
@@ -127,9 +136,9 @@ async function cloudStore() {
     signOut: function () { return au.signOut(auth); },
 
     start: function (onData, onError) {
-      var habits = null, logs = null, pendH = false, pendL = false;
+      var habits = null, logs = null, tasks = null, pendH = false, pendL = false, pendT = false;
       function emit() {
-        if (habits && logs) onData(habits, logs, { pending: pendH || pendL });
+        if (habits && logs && tasks) onData({ habits: habits, logs: logs, tasks: tasks }, { pending: pendH || pendL || pendT });
       }
       unsubs.push(fs.onSnapshot(habitsRef(), { includeMetadataChanges: true }, function (snap) {
         var d = snap.exists() ? snap.data() : null;
@@ -145,6 +154,13 @@ async function cloudStore() {
         });
         logs = next;
         pendL = snap.metadata.hasPendingWrites;
+        emit();
+      }, onError));
+      unsubs.push(fs.onSnapshot(fs.collection(db, 'users', user.uid, 'tasks'), { includeMetadataChanges: true }, function (snap) {
+        var next = {};
+        snap.docs.forEach(function (doc) { next[doc.id] = doc.data().items; });
+        tasks = cleanTasks(next);
+        pendT = snap.metadata.hasPendingWrites;
         emit();
       }, onError));
     },
@@ -167,8 +183,13 @@ async function cloudStore() {
       days[date] = day;
       return fs.setDoc(monthRef(date.slice(0, 7)), { days: days }, { merge: true });
     },
-    applyMerge: function (habits, patch) {
+    // La lista entera de la semana: es corta y así no hay que pensar en mezclas.
+    saveTasks: function (week, items) {
+      return items.length ? fs.setDoc(weekRef(week), { items: items }) : fs.deleteDoc(weekRef(week));
+    },
+    applyMerge: function (habits, patch, tasksPatch) {
       var batch = fs.writeBatch(db);
+      Object.keys(tasksPatch || {}).forEach(function (w) { batch.set(weekRef(w), { items: tasksPatch[w] }); });
       batch.set(habitsRef(), { items: habits.map(function (h) { return { id: h.id, name: h.name, cat: h.cat }; }) });
       Object.keys(patch).forEach(function (mk) {
         batch.set(monthRef(mk), { days: patch[mk] }, { merge: true });

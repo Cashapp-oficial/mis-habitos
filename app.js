@@ -4,8 +4,8 @@
   datos.js y las fechas (siempre de Buenos Aires) en fechas.js.
 */
 
-import { todayStr, parse, addDays, weekStartOf, fmtWd, fmtDay, fmtShort } from './fechas.js';
-import { CATS, getVal, streak as streakOf, mergeData, makeBackup, parseBackup, countDays, cleanLogs } from './datos.js';
+import { todayStr, parse, addDays, weekStartOf, fmtWd, fmtDay, fmtShort, fmtMonth, pad } from './fechas.js';
+import { CATS, getVal, streak as streakOf, mergeData, makeBackup, parseBackup, countDays, cleanLogs, monthStats, countTasks } from './datos.js';
 import { createStore, readLocalData } from './store.js';
 
 var STARTER = [
@@ -29,12 +29,14 @@ var DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-wi
 
 function $(id) { return document.getElementById(id); }
 var els = {
-  viewLogin: $('viewLogin'), viewHoy: $('viewHoy'), viewSemana: $('viewSemana'), viewHabitos: $('viewHabitos'),
+  viewLogin: $('viewLogin'), viewHoy: $('viewHoy'), viewSemana: $('viewSemana'), viewMes: $('viewMes'), viewHabitos: $('viewHabitos'),
   tabbar: $('tabbar'), signIn: $('signIn'), signOut: $('signOut'), accountText: $('accountText'), syncText: $('syncText'),
   dayName: $('dayName'), dayTitle: $('dayTitle'), prevDay: $('prevDay'), nextDay: $('nextDay'),
-  goToday: $('goToday'), summary: $('summary'), hoyList: $('hoyList'),
+  goToday: $('goToday'), summary: $('summary'), hoyList: $('hoyList'), tasksHoy: $('tasksHoy'), tasksSemana: $('tasksSemana'),
   weekEyebrow: $('weekEyebrow'), weekTitle: $('weekTitle'), prevWeek: $('prevWeek'), nextWeek: $('nextWeek'),
   weekSummary: $('weekSummary'), weekGrid: $('weekGrid'),
+  monthEyebrow: $('monthEyebrow'), monthTitle: $('monthTitle'), prevMonth: $('prevMonth'), nextMonth: $('nextMonth'),
+  goThisMonth: $('goThisMonth'), monthBody: $('monthBody'),
   addForm: $('addForm'), newName: $('newName'), newCat: $('newCat'), habitList: $('habitList'),
   exportBtn: $('exportBtn'), importBtn: $('importBtn'), importFile: $('importFile'),
   dialog: $('dialog'), dialogEyebrow: $('dialogEyebrow'), dialogTitle: $('dialogTitle'), dialogText: $('dialogText'),
@@ -92,8 +94,8 @@ function refocus(root, sel) {
 /* ---------- estado ---------- */
 
 var state = {
-  tab: 'hoy', today: todayStr(), date: todayStr(), followToday: true, weekStart: weekStartOf(todayStr()),
-  habits: [], logs: {}, ready: false, confirmDel: null,
+  tab: 'hoy', today: todayStr(), date: todayStr(), followToday: true, weekStart: weekStartOf(todayStr()), month: todayStr().slice(0, 7), followMonth: true,
+  habits: [], logs: {}, tasks: {}, ready: false, confirmDel: null, confirmTask: null,
   user: null, pending: false, online: navigator.onLine, dataKey: ''
 };
 var store = null;
@@ -119,6 +121,12 @@ function setVal(date, id, v) {
 function persistHabits() {
   store.saveHabits(state.habits.map(function (h) { return { id: h.id, name: h.name, cat: h.cat }; })).catch(saveError);
 }
+function tasksOf(week) { return state.tasks[week] || []; }
+function saveTasks(week, items) {
+  if (items.length) state.tasks[week] = items; else delete state.tasks[week];
+  store.saveTasks(week, items.map(function (t) { return { id: t.id, text: t.text, done: t.done }; })).catch(saveError);
+}
+
 function saveError(e) {
   console.error(e);
   say('No se pudo guardar. Revisá la conexión y probá de nuevo.', true);
@@ -190,6 +198,7 @@ function renderHoy() {
   els.dayTitle.textContent = fmtDay.format(dt);
   els.nextDay.disabled = d >= t;
   els.goToday.hidden = d === t;
+  renderTasksHoy();
 
   if (!state.ready) {
     els.summary.innerHTML = '';
@@ -230,9 +239,12 @@ function renderHoy() {
 
 function renderSemana() {
   var t = state.today, ws = state.weekStart;
-  els.weekEyebrow.textContent = ws === weekStartOf(t) ? 'Esta semana' : 'Semana';
+  // Se puede ir hasta la semana que viene, para dejar anotados sus pendientes.
+  var cur = weekStartOf(t);
+  els.weekEyebrow.textContent = ws === cur ? 'Esta semana' : ws > cur ? 'La semana que viene' : 'Semana';
   els.weekTitle.textContent = fmtShort.format(parse(ws)) + ' – ' + fmtShort.format(parse(addDays(ws, 6)));
-  els.nextWeek.disabled = addDays(ws, 7) > t;
+  els.nextWeek.disabled = ws > cur;
+  renderTasksSemana();
 
   if (!state.ready) {
     els.weekSummary.textContent = '';
@@ -281,6 +293,193 @@ function renderSemana() {
   els.weekSummary.textContent = possible ? Math.round(doneAll / possible * 100) + '% cumplido · ' + doneAll + ' de ' + possible + ' posibles' : '';
   els.weekGrid.innerHTML = '<table class="week"><colgroup><col class="name">' + days.map(function () { return '<col>'; }).join('') + '</colgroup>' +
     '<thead>' + head + '</thead><tbody>' + body + '</tbody><tfoot>' + foot + '</tfoot></table>';
+}
+
+function addMonths(mk, n) {
+  var p = mk.split('-').map(Number);
+  var d = new Date(Date.UTC(p[0], p[1] - 1 + n, 1));
+  return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1);
+}
+function daysInMonth(mk) {
+  var p = mk.split('-').map(Number);
+  return new Date(Date.UTC(p[0], p[1], 0)).getUTCDate();
+}
+
+/* El mes entero, del 1 al último día: un calendario pintado según cuánto
+   cumpliste cada día y una tira por hábito con todos los días del mes. */
+function renderMes() {
+  var t = state.today, mk = state.month, thisMonth = t.slice(0, 7);
+  els.monthEyebrow.textContent = mk === thisMonth ? 'Este mes' : 'Mes';
+  els.monthTitle.textContent = fmtMonth.format(parse(mk + '-01'));
+  els.nextMonth.disabled = mk >= thisMonth;
+  els.goThisMonth.hidden = mk === thisMonth;
+
+  if (!state.ready) { els.monthBody.innerHTML = '<p class="empty-note">Cargando tus hábitos…</p>'; return; }
+  var list = ordered();
+  if (!list.length) {
+    els.monthBody.innerHTML = '<p class="empty-note">Todavía no hay hábitos. Cargalos en la pestaña Hábitos.</p>';
+    return;
+  }
+
+  var total = daysInMonth(mk);
+  var stats = monthStats(state.logs, list, mk, t); // solo hasta hoy
+  var past = stats.length, possible = past * list.length;
+  var doneAll = stats.reduce(function (a, s) { return a + s.done; }, 0);
+  var full = stats.filter(function (s) { return s.pct === 1; }).length;
+  var pctAll = possible ? Math.round(doneAll / possible * 100) : 0;
+
+  var summary = '<div class="mes-resumen">' +
+    '<div><span class="mes-num">' + pctAll + '<small>%</small></span><span class="rotulo">cumplido</span></div>' +
+    '<div><span class="mes-num">' + doneAll + '<small>/' + possible + '</small></span><span class="rotulo">hechos</span></div>' +
+    '<div><span class="mes-num">' + full + '</span><span class="rotulo">días completos</span></div>' +
+    '</div>' +
+    '<p class="hint">' + (past === total ? 'Los ' + total + ' días del mes.' : 'Del 1 al ' + past + ' de ' + total + ' días. Se completa a medida que pasa el mes.') + '</p>';
+
+  // Calendario: lunes primero, como la semana.
+  var offset = (parse(mk + '-01').getUTCDay() + 6) % 7;
+  var cal = '<div class="cal-cab" aria-hidden="true">' + WD.map(function (w) { return '<span>' + w + '</span>'; }).join('') + '</div><div class="cal">';
+  for (var b = 0; b < offset; b++) cal += '<span class="cal-hueco"></span>';
+  for (var i = 1; i <= total; i++) {
+    var date = mk + '-' + pad(i), future = date > t;
+    var st = stats[i - 1];
+    var lvl = future || !st.done ? 0 : st.pct === 1 ? 4 : st.pct >= 0.67 ? 3 : st.pct >= 0.34 ? 2 : 1;
+    var lbl = fmtDay.format(parse(date)) + (future ? '' : ': ' + st.done + ' de ' + list.length + ' hechos');
+    cal += '<button type="button" class="cal-dia n' + lvl + (date === t ? ' hoy' : '') + '" data-date="' + date + '"' +
+      (future ? ' disabled' : '') + ' aria-label="' + lbl + '"><span>' + i + '</span>' +
+      (!future && st.done ? '<small>' + Math.round(st.pct * 100) + '%</small>' : '') + '</button>';
+  }
+  cal += '</div>';
+  var legend = '<div class="cal-leyenda" aria-hidden="true"><span>Menos</span><i class="n0"></i><i class="n1"></i><i class="n2"></i><i class="n3"></i><i class="n4"></i><span>Todo</span></div>';
+
+  var cats = CATS.map(function (c) {
+    var hs = list.filter(function (h) { return h.cat === c.key; });
+    if (!hs.length) return '';
+    return '<section class="cat vidrio cat-' + c.key + '"><header class="cat-head"><h2>' + c.label + '</h2></header>' +
+      '<ul class="habits">' + hs.map(function (h) {
+        var n = 0, cells = '';
+        for (var d = 1; d <= total; d++) {
+          var date = mk + '-' + pad(d), v = val(date, h.id);
+          if (v === 1) n++;
+          cells += '<i class="' + (date > t ? 'fut' : v === 1 ? 'done' : v === 0 ? 'miss' : '') + (date === t ? ' cur' : '') + '"></i>';
+        }
+        return '<li class="mes-habito"><div class="mes-habito-cab"><p class="h-name">' + esc(h.name) + '</p>' +
+          '<span class="count">' + n + ' de ' + past + (past === 1 ? ' día' : ' días') + '</span></div>' +
+          '<div class="tira" role="img" aria-label="' + esc(h.name) + ': ' + n + ' de ' + past + ' días hechos">' + cells + '</div></li>';
+      }).join('') + '</ul></section>';
+  }).join('');
+
+  els.monthBody.innerHTML = summary +
+    '<div class="vidrio cal-tarjeta">' + cal + legend + '</div>' +
+    '<p class="hint">Tocá un día para verlo y marcarlo en Hoy.</p>' +
+    '<div class="mes-cats">' + cats + '</div>';
+}
+
+/* ---------- pendientes de la semana ---------- */
+
+var CHECK_CHICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+/* La lista de una semana. En Hoy va compacta (sin campo para anotar) y solo
+   si esa semana tiene pendientes; en Semana va completa. */
+function tasksHtml(ws, compact) {
+  var items = tasksOf(ws), t = state.today;
+  var done = items.filter(function (x) { return x.done; }).length;
+  var cur = weekStartOf(t);
+  var title = ws === cur ? 'Pendientes de la semana' : ws > cur ? 'Pendientes de la semana que viene' : 'Pendientes de esa semana';
+  var html = '<section class="vidrio tareas" data-week="' + ws + '" aria-label="' + title + '">' +
+    '<header class="tareas-cab"><h2>' + title + '</h2>' + (items.length ? '<span class="count">' + done + '/' + items.length + '</span>' : '') + '</header>';
+
+  if (!compact && ws === cur) {
+    var left = tasksOf(addDays(ws, -7)).filter(function (x) { return !x.done; });
+    if (left.length) {
+      html += '<div class="tareas-quedaron"><p>' + (left.length === 1 ? 'Quedó 1 pendiente' : 'Quedaron ' + left.length + ' pendientes') +
+        ' sin hacer la semana pasada.</p><button type="button" class="btn" data-tact="carry">Pasar a esta semana</button></div>';
+    }
+  }
+
+  if (items.length) {
+    html += '<ul class="tareas-lista">' + items.map(function (x) {
+      var txt = esc(x.text), armed = state.confirmTask === x.id;
+      return '<li class="tarea' + (x.done ? ' hecha' : '') + '">' +
+        '<button type="button" class="tarea-check" data-tact="toggle" data-tid="' + x.id + '" aria-pressed="' + x.done + '" aria-label="' + txt + ': hecho">' + CHECK_CHICO + '</button>' +
+        '<p class="tarea-texto">' + txt + '</p>' +
+        (compact ? '' : '<button type="button" class="tarea-borrar' + (armed ? ' armed' : '') + '" data-tact="del" data-tid="' + x.id + '" aria-label="' + (armed ? 'Confirmar: borrar ' : 'Borrar ') + txt + '">' + (armed ? 'Borrar' : XMARK) + '</button>') +
+        '</li>';
+    }).join('') + '</ul>';
+  } else if (!compact) {
+    html += '<p class="tareas-vacio">Nada anotado para esta semana. Sumá lo que tengas que hacer, por ejemplo: Llamar al dentista.</p>';
+  }
+
+  if (compact) {
+    html += '<button type="button" class="tareas-ver" data-tact="goSemana">Ver y anotar en Semana</button>';
+  } else {
+    html += '<form class="tarea-nueva" autocomplete="off">' +
+      '<label class="sr-only" for="nt-' + ws + '">Nuevo pendiente</label>' +
+      '<input id="nt-' + ws + '" class="field" type="text" maxlength="140" placeholder="Anotar un pendiente">' +
+      '<button type="submit" class="btn primary">Añadir</button></form>';
+  }
+  return html + '</section>';
+}
+
+function renderTasksHoy() {
+  var ws = weekStartOf(state.date);
+  els.tasksHoy.innerHTML = state.ready && tasksOf(ws).length ? tasksHtml(ws, true) : '';
+}
+function renderTasksSemana() {
+  els.tasksSemana.innerHTML = state.ready ? tasksHtml(state.weekStart, false) : '';
+}
+
+function onTaskClick(e) {
+  var b = e.target.closest('button[data-tact]');
+  if (!b) return;
+  var box = b.closest('.tareas'), act = b.dataset.tact;
+  if (act === 'goSemana') { state.weekStart = box.dataset.week; setTab('semana'); return; }
+  var ws = box.dataset.week, id = b.dataset.tid;
+  var items = tasksOf(ws).map(function (x) { return { id: x.id, text: x.text, done: x.done }; });
+  if (act === 'carry') {
+    var prev = addDays(ws, -7);
+    var old = tasksOf(prev);
+    var left = old.filter(function (x) { return !x.done; });
+    saveTasks(prev, old.filter(function (x) { return x.done; }));
+    saveTasks(ws, items.concat(left.map(function (x) { return { id: x.id, text: x.text, done: false }; })));
+    render();
+    say(left.length === 1 ? 'Pendiente pasado a esta semana.' : left.length + ' pendientes pasados a esta semana.');
+    return;
+  }
+  var it = items.find(function (x) { return x.id === id; });
+  if (!it) return;
+  if (act === 'toggle') {
+    it.done = !it.done;
+    saveTasks(ws, items);
+    render();
+    refocus(document, '.tareas[data-week="' + ws + '"] button[data-tact="toggle"][data-tid="' + id + '"]');
+  } else if (act === 'del') {
+    if (state.confirmTask === id) {
+      state.confirmTask = null;
+      saveTasks(ws, items.filter(function (x) { return x.id !== id; }));
+      render();
+      say('Pendiente borrado.');
+    } else {
+      state.confirmTask = id;
+      render();
+      refocus(document, '.tareas[data-week="' + ws + '"] button[data-tact="del"][data-tid="' + id + '"]');
+      clearTimeout(confirmTaskTimer);
+      confirmTaskTimer = setTimeout(function () { if (state.confirmTask) { state.confirmTask = null; render(); } }, 4000);
+    }
+  }
+}
+var confirmTaskTimer;
+
+function onTaskSubmit(e) {
+  var form = e.target.closest('.tarea-nueva');
+  if (!form) return;
+  e.preventDefault();
+  var input = form.querySelector('input'), text = input.value.trim().slice(0, 140);
+  if (!text) { input.focus(); return; }
+  var ws = form.closest('.tareas').dataset.week;
+  if (tasksOf(ws).length >= 100) { say('Esta semana ya tiene 100 pendientes.', true); return; }
+  saveTasks(ws, tasksOf(ws).concat([{ id: makeId(), text: text, done: false }]));
+  render();
+  refocus(els.tasksSemana, '.tarea-nueva input');
 }
 
 // Si estás escribiendo un nombre, no se redibuja la lista (perderías lo que
@@ -343,6 +542,7 @@ function renderAccount() {
 function render() {
   if (state.tab === 'hoy') renderHoy();
   else if (state.tab === 'semana') renderSemana();
+  else if (state.tab === 'mes') renderMes();
   else renderHabitos();
 }
 
@@ -350,6 +550,7 @@ function setTab(t) {
   state.tab = t;
   els.viewHoy.hidden = t !== 'hoy';
   els.viewSemana.hidden = t !== 'semana';
+  els.viewMes.hidden = t !== 'mes';
   els.viewHabitos.hidden = t !== 'habitos';
   document.querySelectorAll('.tab').forEach(function (b) {
     if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
@@ -362,7 +563,7 @@ function showLogin(on) {
   els.viewLogin.hidden = !on;
   els.tabbar.hidden = on;
   if (on) {
-    els.viewHoy.hidden = els.viewSemana.hidden = els.viewHabitos.hidden = true;
+    els.viewHoy.hidden = els.viewSemana.hidden = els.viewMes.hidden = els.viewHabitos.hidden = true;
   } else {
     setTab(state.tab);
   }
@@ -390,7 +591,8 @@ function move(id, dir) {
 
 /** Suma datos que llegan (respaldo o navegador) a los actuales y los guarda. */
 function applyIncoming(incoming, prefer) {
-  var r = mergeData({ habits: state.habits, logs: state.logs }, incoming, prefer);
+  var r = mergeData({ habits: state.habits, logs: state.logs, tasks: state.tasks }, incoming, prefer);
+  Object.keys(r.tasksPatch).forEach(function (w) { state.tasks[w] = r.tasksPatch[w]; });
   state.habits = r.habits;
   Object.keys(r.patch).forEach(function (mk) {
     var m = state.logs[mk] || (state.logs[mk] = {});
@@ -398,7 +600,7 @@ function applyIncoming(incoming, prefer) {
       m[date] = Object.assign(m[date] || {}, r.patch[mk][date]);
     });
   });
-  store.applyMerge(state.habits, r.patch).catch(saveError);
+  store.applyMerge(state.habits, r.patch, r.tasksPatch).catch(saveError);
   render();
   return r;
 }
@@ -414,13 +616,13 @@ async function offerMigration() {
   var key = 'mh:migrado:' + state.user.uid;
   try { if (localStorage.getItem(key)) return; } catch (e) { return; }
   var local = readLocalData();
-  var days = countDays(cleanLogs(local.logs));
-  if (!local.habits.length && !days) return;
+  var days = countDays(cleanLogs(local.logs)), nt = countTasks(local.tasks);
+  if (!local.habits.length && !days && !nt) return;
   var ok = await ask({
     eyebrow: 'Datos en este navegador',
     title: 'Traer tu historial',
     text: 'Encontramos ' + plural(local.habits.length, 'hábito', 'hábitos') + ' y ' + plural(days, 'día', 'días') +
-      ' con marcas guardados en este navegador. ¿Los sumamos a tu cuenta? Lo que ya tengas en la nube no se pisa.',
+      ' con marcas' + (nt ? ' y ' + plural(nt, 'pendiente', 'pendientes') : '') + ' guardados en este navegador. ¿Los sumamos a tu cuenta? Lo que ya tengas en la nube no se pisa.',
     ok: 'Importar', cancel: 'No importar'
   });
   if (ok === null) { migrationAsked = false; return; } // cerró con Esc: se vuelve a ofrecer la próxima vez
@@ -432,7 +634,7 @@ async function offerMigration() {
 }
 
 function exportBackup() {
-  var data = makeBackup(state.habits, state.logs);
+  var data = makeBackup(state.habits, state.logs, state.tasks);
   var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
@@ -449,17 +651,17 @@ async function importBackup(file) {
   var data;
   try { data = parseBackup(await file.text()); }
   catch (e) { say(e.message, true); return; }
-  var days = countDays(data.logs);
+  var days = countDays(data.logs), nt = countTasks(data.tasks);
   var ok = await ask({
     eyebrow: 'Importar respaldo',
     title: file.name.length > 28 ? 'Cargar respaldo' : file.name,
     text: 'Este archivo trae ' + plural(data.habits.length, 'hábito', 'hábitos') + ' y ' + plural(days, 'día', 'días') +
-      ' con marcas. Se suman a lo que ya tenés; si un día tiene una marca distinta, queda la del archivo. No se borra nada.',
+      ' con marcas' + (nt ? ', y ' + plural(nt, 'pendiente', 'pendientes') : '') + '. Se suman a lo que ya tenés; si un día tiene una marca distinta, queda la del archivo. No se borra nada.',
     ok: 'Importar', cancel: 'Cancelar'
   });
   if (!ok) return;
   var r = applyIncoming(data, 'incoming');
-  say('Respaldo importado: ' + plural(r.newHabits, 'hábito nuevo', 'hábitos nuevos') + ' y ' + plural(r.marks, 'marca', 'marcas') + ' cambiadas.');
+  say('Respaldo importado: ' + plural(r.newHabits, 'hábito nuevo', 'hábitos nuevos') + ', ' + plural(r.marks, 'marca', 'marcas') + ' y ' + plural(r.newTasks, 'pendiente', 'pendientes') + '.');
 }
 
 /* ---------- eventos ---------- */
@@ -516,6 +718,10 @@ els.habitList.addEventListener('click', function (e) {
   }
 });
 document.addEventListener('click', function (e) {
+  if (state.confirmTask && !e.target.closest('button[data-tact="del"]')) {
+    state.confirmTask = null;
+    render();
+  }
   if (state.confirmDel && !e.target.closest('button[data-act="del"]')) {
     state.confirmDel = null;
     if (state.tab === 'habitos') renderHabitos();
@@ -564,12 +770,33 @@ els.prevWeek.addEventListener('click', function () {
   state.weekStart = addDays(state.weekStart, -7); renderSemana();
 });
 els.nextWeek.addEventListener('click', function () {
-  if (addDays(state.weekStart, 7) > state.today) return;
+  if (state.weekStart > weekStartOf(state.today)) return;
   state.weekStart = addDays(state.weekStart, 7); renderSemana();
+});
+els.prevMonth.addEventListener('click', function () {
+  state.month = addMonths(state.month, -1); state.followMonth = false; renderMes();
+});
+els.nextMonth.addEventListener('click', function () {
+  if (state.month >= state.today.slice(0, 7)) return;
+  state.month = addMonths(state.month, 1); state.followMonth = state.month === state.today.slice(0, 7); renderMes();
+});
+els.goThisMonth.addEventListener('click', function () {
+  state.month = state.today.slice(0, 7); state.followMonth = true; renderMes();
+});
+els.monthBody.addEventListener('click', function (e) {
+  var b = e.target.closest('button.cal-dia');
+  if (!b || b.disabled) return;
+  state.date = b.dataset.date;
+  state.followToday = state.date === state.today;
+  setTab('hoy');
 });
 document.querySelectorAll('.tab').forEach(function (b) {
   b.addEventListener('click', function () { setTab(b.dataset.tab); });
 });
+
+els.tasksHoy.addEventListener('click', onTaskClick);
+els.tasksSemana.addEventListener('click', onTaskClick);
+els.tasksSemana.addEventListener('submit', onTaskSubmit);
 
 els.exportBtn.addEventListener('click', exportBackup);
 els.importBtn.addEventListener('click', function () { els.importFile.click(); });
@@ -619,6 +846,7 @@ function checkDay() {
   state.today = t;
   if (state.followToday) state.date = t;
   if (state.weekStart === weekStartOf(prev)) state.weekStart = weekStartOf(t);
+  if (state.followMonth) state.month = t.slice(0, 7);
   render();
 }
 setInterval(checkDay, 20000);
@@ -628,15 +856,17 @@ document.addEventListener('visibilitychange', function () {
 
 /* ---------- arranque ---------- */
 
-function onData(habits, logs, meta) {
+function onData(data, meta) {
+  var habits = data.habits, logs = data.logs, tasks = data.tasks;
   state.pending = !!meta.pending;
-  var key = JSON.stringify([habits, logs]);
+  var key = JSON.stringify([habits, logs, tasks]);
   var first = !state.ready;
   state.ready = true;
   if (key === state.dataKey && !first) { renderAccount(); return; }
   state.dataKey = key;
   state.habits = clone(habits);
   state.logs = clone(logs);
+  state.tasks = clone(tasks);
   // Que redibujar no te saque el foco del botón que estabas usando.
   var a = document.activeElement, sel = null;
   if (a && a.tagName === 'BUTTON' && a.dataset && a.dataset.id) {
@@ -644,7 +874,12 @@ function onData(habits, logs, meta) {
       (a.dataset.act ? '[data-act="' + a.dataset.act + '"]' : '') +
       (a.dataset.date ? '[data-date="' + a.dataset.date + '"]' : '');
   }
+  var typing = a && a.closest && a.closest('.tarea-nueva') ? { week: a.closest('.tareas').dataset.week, value: a.value } : null;
   render();
+  if (typing) {
+    var again = document.querySelector('.tareas[data-week="' + typing.week + '"] .tarea-nueva input');
+    if (again) { again.value = typing.value; again.focus(); }
+  }
   if (sel && document.activeElement !== a) refocus(document, sel);
   if (first) offerMigration();
 }
@@ -666,10 +901,11 @@ async function boot() {
     state.user = user;
     if (!user) {
       store.stop();
-      state.ready = false; state.habits = []; state.logs = {}; state.dataKey = ''; migrationAsked = false;
+      state.ready = false; state.habits = []; state.logs = {}; state.tasks = {}; state.dataKey = ''; migrationAsked = false;
       // Que no quede nada de la cuenta anterior dibujado en las vistas ocultas.
-      els.summary.innerHTML = els.hoyList.innerHTML = els.weekGrid.innerHTML = els.habitList.innerHTML = '';
+      els.summary.innerHTML = els.tasksHoy.innerHTML = els.tasksSemana.innerHTML = els.hoyList.innerHTML = els.weekGrid.innerHTML = els.monthBody.innerHTML = els.habitList.innerHTML = '';
       state.tab = 'hoy'; state.date = state.today; state.followToday = true; state.weekStart = weekStartOf(state.today);
+      state.month = state.today.slice(0, 7); state.followMonth = true;
       showLogin(true);
       return;
     }

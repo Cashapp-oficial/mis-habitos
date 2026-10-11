@@ -11,7 +11,7 @@
   Al cambiar la lista de archivos, subí VERSION para que se renueve la copia.
 */
 
-var VERSION = 'v1';
+var VERSION = 'v2';
 var SHELL = 'mis-habitos-shell-' + VERSION;
 var LIBS = 'mis-habitos-libs-v1';
 var FILES = [

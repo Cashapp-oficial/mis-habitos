@@ -23,6 +23,8 @@ with sync_playwright() as p:
     # Celular, y con la zona horaria de Tokio a propósito: "hoy" tiene que ser el de Buenos Aires.
     ctx = nav.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2,
                           is_mobile=True, has_touch=True, timezone_id="Asia/Tokyo", accept_downloads=True)
+    # Modo local: sin la configuración real de Firebase.
+    ctx.route("**/firebase-config.js", lambda r: r.fulfill(body="export const firebaseConfig = null;", content_type="text/javascript"))
     page = ctx.new_page()
     page.on("console", lambda m: errores.append(m.text) if m.type == "error" else None)
     page.on("pageerror", lambda e: errores.append(str(e)))
@@ -69,8 +71,68 @@ with sync_playwright() as p:
 
     page.click('.tab[data-tab="semana"]')
     page.wait_for_selector("table.week")
+    page.click("#prevWeek")
+    page.click("#nextWeek")
     page.screenshot(path=str(SALIDA / "semana.png"), full_page=True)
     ok("semana: " + page.text_content("#weekSummary"))
+
+    # Pendientes de la semana: anotar, tildar y que se vean en Hoy.
+    page.fill("#tasksSemana .tarea-nueva input", "Llamar al dentista")
+    page.click("#tasksSemana .tarea-nueva button")
+    page.fill("#tasksSemana .tarea-nueva input", "Entregar el informe")
+    page.keyboard.press("Enter")
+    page.wait_for_selector("#tasksSemana .tarea >> nth=1")
+    page.locator("#tasksSemana .tarea-check").first.click()
+    if page.text_content("#tasksSemana .tareas-cab .count").strip() != "1/2":
+        falla("los pendientes no cuentan 1/2")
+    ok("anotar dos pendientes y tildar uno da 1/2")
+    sobra = page.evaluate("""() => { const c = document.querySelector('#tasksSemana .tareas').getBoundingClientRect();
+      return [...document.querySelectorAll('#tasksSemana .tareas *')].filter(e => e.getBoundingClientRect().right > c.right + 1).length }""")
+    if sobra:
+        falla(f"{sobra} elementos se salen de la tarjeta de pendientes")
+    ok("nada se sale de la tarjeta de pendientes")
+    page.screenshot(path=str(SALIDA / "semana-pendientes.png"), full_page=True)
+    page.click("#nextWeek")
+    if page.text_content("#weekEyebrow") != "La semana que viene":
+        falla("no se puede ir a la semana que viene")
+    if not page.is_disabled("#nextWeek"):
+        falla("se puede ir más allá de la semana que viene")
+    page.fill("#tasksSemana .tarea-nueva input", "Turno con el médico")
+    page.keyboard.press("Enter")
+    page.wait_for_selector("#tasksSemana >> text=Turno con el médico")
+    ok("anotar un pendiente en la semana que viene")
+    page.click("#prevWeek")
+    page.click('.tab[data-tab="hoy"]')
+    page.wait_for_selector("#tasksHoy .tarea")
+    if page.locator("#tasksHoy .tarea").count() != 2:
+        falla("Hoy no muestra los 2 pendientes de esta semana")
+    page.locator("#tasksHoy .tarea-check").nth(1).click()
+    page.reload()
+    page.wait_for_selector("#tasksHoy .tarea")
+    if page.locator("#tasksHoy .tarea.hecha").count() != 2:
+        falla("tildar un pendiente desde Hoy no se guardó")
+    ok("los pendientes se ven y se tildan desde Hoy, y siguen al recargar")
+    page.screenshot(path=str(SALIDA / "hoy-pendientes.png"), full_page=True)
+
+    # Mes: el mes entero, del 1 al último día.
+    page.click('.tab[data-tab="mes"]')
+    page.wait_for_selector(".cal-dia")
+    import calendar
+    y, m = int(hoy_ba[:4]), int(hoy_ba[5:7])
+    dias = calendar.monthrange(y, m)[1]
+    if page.locator(".cal-dia").count() != dias:
+        falla(f"el calendario no tiene los {dias} días del mes")
+    if page.locator(".tira").first.locator("i").count() != dias:
+        falla("la tira de cada hábito no tiene todos los días del mes")
+    ok(f"Mes: calendario y tiras con los {dias} días")
+    page.screenshot(path=str(SALIDA / "mes.png"), full_page=True)
+    page.click("#prevMonth")
+    if page.is_hidden("#goThisMonth"):
+        falla("en el mes anterior no aparece Volver a este mes")
+    page.click("#goThisMonth")
+    page.locator(".cal-dia.hoy").click()
+    page.wait_for_selector("#viewHoy:not([hidden])")
+    ok("ir al mes anterior, volver y tocar un día lleva a Hoy")
 
     page.click('.tab[data-tab="habitos"]')
     page.fill("#newName", "Leer 20 minutos")
@@ -85,7 +147,7 @@ with sync_playwright() as p:
     arch = SALIDA / "respaldo.json"
     d.value.save_as(arch)
     data = json.loads(arch.read_text(encoding="utf-8"))
-    if len(data["habits"]) != 11 or not data["logs"]:
+    if len(data["habits"]) != 11 or not data["logs"] or sum(len(v) for v in data["tasks"].values()) != 3:
         falla("el respaldo no trae los 11 hábitos y las marcas")
     ok(f"exportar respaldo: {len(data['habits'])} hábitos, meses {list(data['logs'])}")
 
