@@ -1,0 +1,15 @@
+{
+  "name": "mis-habitos",
+  "private": true,
+  "description": "Solo para las pruebas en la compu. La app no necesita nada de esto para funcionar.",
+  "type": "module",
+  "scripts": {
+    "probar-reglas": "firebase emulators:exec --only firestore --project demo-habitos \"node --test pruebas/reglas.test.mjs\"",
+    "emuladores": "firebase emulators:start --only auth,firestore --project demo-habitos"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase": "12.19.0",
+    "firebase-tools": "15.31.0"
+  }
+}

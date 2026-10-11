@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111112">
+<meta name="color-scheme" content="dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hábitos">
+<meta name="description" content="Tus hábitos de ejercicio, cuidado personal y trabajo, día por día.">
+<title>Mis hábitos</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+
+<div class="fondo" aria-hidden="true">
+  <svg class="fondo-roseta" id="fondoRoseta" viewBox="0 0 300 300"></svg>
+</div>
+<div class="grano" aria-hidden="true"></div>
+
+<main class="app">
+  <!-- Entrada: solo con la nube configurada y sin sesión iniciada. -->
+  <section id="viewLogin" class="view login" hidden>
+    <div class="login-sello">
+      <svg class="roseta" data-roseta viewBox="0 0 300 300" aria-hidden="true"></svg>
+      <img src="icons/icon-192.png" width="96" height="96" alt="">
+    </div>
+    <p class="rotulo orn">Constancia diaria</p>
+    <h1 class="d login-titulo">Mis hábitos</h1>
+    <p class="lede">Ejercicio, cuidado personal y trabajo, día por día. Entrá con tu cuenta de Google para que tu historial quede guardado y sincronizado entre el celular y la compu.</p>
+    <button type="button" id="signIn" class="btn-verde">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.6 12.23c0-.7-.06-1.37-.18-2.02H12v3.82h5.38a4.6 4.6 0 0 1-2 3.02v2.5h3.24c1.9-1.75 2.98-4.32 2.98-7.32ZM12 22c2.7 0 4.96-.9 6.62-2.43l-3.24-2.5c-.9.6-2.04.96-3.38.96-2.6 0-4.8-1.76-5.59-4.12H3.07v2.58A10 10 0 0 0 12 22Zm-5.59-8.09a6 6 0 0 1 0-3.82V7.51H3.07a10 10 0 0 0 0 8.98l3.34-2.58ZM12 5.96c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.93 5.51l3.34 2.58C7.2 7.72 9.4 5.96 12 5.96Z"/></svg>
+      Entrar con Google
+    </button>
+    <p class="nota">Tus datos solo los podés ver vos.</p>
+  </section>
+
+  <section id="viewHoy" class="view">
+    <div class="top">
+      <div class="top-text">
+        <p class="rotulo orn" id="dayName"></p>
+        <h1 class="d" id="dayTitle"></h1>
+      </div>
+      <div class="nav-btns">
+        <button type="button" id="prevDay" class="icon-btn" aria-label="Día anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <button type="button" id="nextDay" class="icon-btn" aria-label="Día siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>
+    <button type="button" id="goToday" class="chip" hidden>Volver a hoy</button>
+    <div class="summary" id="summary"></div>
+    <div id="hoyList"></div>
+  </section>
+
+  <section id="viewSemana" class="view" hidden>
+    <div class="top">
+      <div class="top-text">
+        <p class="rotulo orn" id="weekEyebrow">Semana</p>
+        <h1 class="d" id="weekTitle"></h1>
+      </div>
+      <div class="nav-btns">
+        <button type="button" id="prevWeek" class="icon-btn" aria-label="Semana anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <button type="button" id="nextWeek" class="icon-btn" aria-label="Semana siguiente"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>
+    <p class="hint" id="weekSummary"></p>
+    <div class="week-card vidrio" id="weekGrid"></div>
+    <p class="hint">Tocá una celda para pasar de sin marcar a hecho, a no hecho y de nuevo a sin marcar.</p>
+  </section>
+
+  <section id="viewHabitos" class="view" hidden>
+    <div class="top">
+      <div class="top-text">
+        <p class="rotulo orn">Tu lista</p>
+        <h1 class="d">Mis hábitos</h1>
+        <p class="lede">Cambiá nombres, orden y categoría. Si eliminás un hábito, deja de aparecer pero se conservan las marcas pasadas.</p>
+      </div>
+    </div>
+    <form id="addForm" class="add vidrio" autocomplete="off">
+      <label class="sr-only" for="newName">Nombre del nuevo hábito</label>
+      <input id="newName" class="field grow" type="text" maxlength="60" placeholder="Nuevo hábito, por ejemplo: Leer 20 minutos">
+      <label class="sr-only" for="newCat">Categoría del nuevo hábito</label>
+      <select id="newCat" class="field">
+        <option value="ejercicio">Ejercicio</option>
+        <option value="cuidado">Cuidado personal</option>
+        <option value="trabajo">Trabajo</option>
+      </select>
+      <button type="submit" class="btn primary">Añadir</button>
+    </form>
+    <div id="habitList"></div>
+
+    <svg class="guarda" data-guarda viewBox="0 0 354 12" preserveAspectRatio="none" aria-hidden="true"></svg>
+
+    <section class="vidrio panel" aria-labelledby="respaldoTitulo">
+      <p class="rotulo orn" id="respaldoTitulo">Respaldo</p>
+      <p class="panel-texto">Bajá todo tu historial en un archivo para guardarlo donde quieras. Si algún día lo necesitás, lo volvés a cargar desde acá.</p>
+      <div class="panel-botones">
+        <button type="button" id="exportBtn" class="btn">Exportar respaldo</button>
+        <button type="button" id="importBtn" class="btn">Importar respaldo</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </section>
+
+    <section class="vidrio panel" aria-labelledby="cuentaTitulo">
+      <p class="rotulo orn" id="cuentaTitulo">Cuenta</p>
+      <p class="panel-texto" id="accountText"></p>
+      <p class="panel-texto sync" id="syncText"></p>
+      <div class="panel-botones">
+        <button type="button" id="signOut" class="btn" hidden>Cerrar sesión</button>
+      </div>
+    </section>
+  </section>
+</main>
+
+<dialog id="dialog" class="dialogo" aria-labelledby="dialogTitle">
+  <form method="dialog">
+    <p class="rotulo orn" id="dialogEyebrow"></p>
+    <h2 class="d" id="dialogTitle"></h2>
+    <p id="dialogText"></p>
+    <div class="dialogo-botones">
+      <button type="submit" value="cancel" id="dialogCancel" class="btn"></button>
+      <button type="submit" value="ok" id="dialogOk" class="btn primary"></button>
+    </div>
+  </form>
+</dialog>
+
+<p id="status" class="status" role="status" hidden></p>
+
+<nav class="tabbar" id="tabbar" aria-label="Secciones">
+  <button type="button" class="tab" data-tab="hoy" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg><span>Hoy</span></button>
+  <button type="button" class="tab" data-tab="semana"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Semana</span></button>
+  <button type="button" class="tab" data-tab="habitos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg><span>Hábitos</span></button>
+</nav>
+
+<noscript><p class="nota" style="text-align:center">Esta app necesita JavaScript activado.</p></noscript>
+</body>
+</html>

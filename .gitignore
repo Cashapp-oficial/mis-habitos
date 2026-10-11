@@ -1,0 +1,5 @@
+node_modules/
+pruebas/capturas/
+__pycache__/
+*.log
+.firebase/
