@@ -1,0 +1,32 @@
+# Recordatorio diario: cada 15 minutos revisa si a alguien le toca el aviso
+# y se lo manda. Ver recordatorio/enviar.mjs.
+name: Recordatorio diario
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recordatorio
+  cancel-in-progress: false
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: recordatorio/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: recordatorio
+      - run: node recordatorio/enviar.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

@@ -11,13 +11,13 @@
   Al cambiar la lista de archivos, subí VERSION para que se renueve la copia.
 */
 
-var VERSION = 'v3';
+var VERSION = 'v4';
 var SHELL = 'mis-habitos-shell-' + VERSION;
 var LIBS = 'mis-habitos-libs-v1';
 var FILES = [
   './', './index.html', './styles.css', './app.js', './store.js', './datos.js', './fechas.js',
   './firebase-config.js', './manifest.webmanifest',
-  './icons/favicon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'
+  './icons/favicon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/badge-96.png'
 ];
 
 self.addEventListener('install', function (event) {
@@ -77,11 +77,30 @@ self.addEventListener('fetch', function (event) {
 });
 
 /*
-  Para más adelante, recordatorios diarios: acá van los eventos 'push' y
-  'notificationclick' (Firebase Cloud Messaging), por ejemplo:
-
-  self.addEventListener('notificationclick', function (event) {
-    event.notification.close();
-    event.waitUntil(self.clients.openWindow('./'));
-  });
+  Recordatorio diario. El aviso lo manda recordatorio/enviar.mjs (GitHub
+  Actions) por Firebase Cloud Messaging, como mensaje de datos:
+  { title, body }. Acá se muestra, y al tocarlo se abre la app.
 */
+self.addEventListener('push', function (event) {
+  var p = {};
+  try { p = event.data ? event.data.json() : {}; } catch (e) { p = {}; }
+  var d = p.data || p.notification || p;
+  event.waitUntil(self.registration.showNotification(d.title || 'Mis hábitos', {
+    body: d.body || 'Acordate de marcar tus hábitos de hoy.',
+    icon: 'icons/icon-192.png',
+    badge: 'icons/badge-96.png',
+    tag: 'recordatorio',
+    renotify: true,
+    data: { url: './' }
+  }));
+});
+
+self.addEventListener('notificationclick', function (event) {
+  event.notification.close();
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
+    for (var i = 0; i < list.length; i++) {
+      if ('focus' in list[i]) return list[i].focus();
+    }
+    return self.clients.openWindow('./');
+  }));
+});

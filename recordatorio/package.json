@@ -1,0 +1,9 @@
+{
+  "name": "mis-habitos-recordatorio",
+  "private": true,
+  "description": "Manda el recordatorio diario. Lo corre GitHub Actions.",
+  "type": "module",
+  "dependencies": {
+    "firebase-admin": "14.5.0"
+  }
+}

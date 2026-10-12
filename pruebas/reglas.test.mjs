@@ -73,3 +73,16 @@ test('pendientes de la semana: solo la dueña, con la forma correcta', async () 
   await assertFails(setDoc(doc(a, 'users/alicia/tasks/semana1'), { items: [] }));
   await assertFails(setDoc(doc(a, 'users/alicia/tasks/2026-10-05'), { items: [], extra: 1 }));
 });
+
+test('recordatorio: solo la dueña, con hora válida y pocos aparatos', async () => {
+  const a = alicia(), b = bruno();
+  const ref = (db) => doc(db, 'users/alicia/config/reminder');
+  await assertSucceeds(setDoc(ref(a), { enabled: true, time: '21:00', tokens: ['tok1'] }));
+  await assertSucceeds(getDoc(ref(a)));
+  await assertFails(getDoc(ref(b)));
+  await assertFails(setDoc(ref(b), { enabled: false }));
+  await assertFails(setDoc(ref(a), { enabled: true, time: '25:00' }));
+  await assertFails(setDoc(ref(a), { enabled: 'si' }));
+  await assertFails(setDoc(ref(a), { enabled: true, otra: 1 }));
+  await assertFails(setDoc(ref(a), { tokens: Array.from({ length: 11 }, (_, i) => 't' + i) }));
+});

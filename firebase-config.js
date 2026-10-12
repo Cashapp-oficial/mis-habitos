@@ -16,6 +16,10 @@
 
   Estos datos no son secretos: identifican el proyecto. Lo que protege tus
   datos son las reglas de firestore.rules.
+
+  vapidKey: la clave pública de los avisos (Configuración del proyecto ›
+  Cloud Messaging › Certificados push web). Tampoco es secreta. Mientras sea
+  null, el recordatorio diario aparece como "falta configurar".
 */
 export const firebaseConfig = {
   apiKey: "AIzaSyAOdQl6a6XF8G_Hox1GRJQBwsBy3r6j1ZI",
@@ -25,3 +29,5 @@ export const firebaseConfig = {
   messagingSenderId: "1053994413350",
   appId: "1:1053994413350:web:49c0f4e17fe3f3aafca5e7"
 };
+
+export const vapidKey = null;

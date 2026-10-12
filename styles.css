@@ -692,3 +692,20 @@ select.field option { background: #1b1b1d; color: var(--texto); }
 }
 .dia.on { background: var(--c); border-color: var(--c); color: var(--sobre-color); }
 .add #newFreq { flex: 1 1 100%; }
+
+
+/* ---------- Recordatorio ---------- */
+
+.recordatorio-fila { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.interruptor { display: inline-flex; align-items: center; gap: 12px; font-weight: 600; cursor: pointer; }
+.interruptor input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.interruptor-pista { position: relative; width: 50px; height: 30px; border-radius: 999px; background: var(--capa-3); border: 1px solid var(--linea-fuerte); transition: background-color 0.2s; }
+.interruptor-pista::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--texto); transition: transform 0.2s; }
+.interruptor input:checked + .interruptor-pista { background: var(--verde); border-color: var(--verde); }
+.interruptor input:checked + .interruptor-pista::after { transform: translateX(20px); background: var(--sobre-color); }
+.interruptor input:focus-visible + .interruptor-pista { outline: 2px solid var(--verde); outline-offset: 2px; }
+.interruptor input:disabled + .interruptor-pista { opacity: 0.4; }
+.field.hora { width: 120px; flex: none; font-family: var(--font-data); text-align: center; color-scheme: dark; }
+@media (prefers-reduced-motion: reduce) {
+  .interruptor-pista, .interruptor-pista::after { transition: none; }
+}

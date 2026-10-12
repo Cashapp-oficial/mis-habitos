@@ -38,6 +38,7 @@ archivos que necesita la app sin conexión, subí `VERSION` en `sw.js`.
 ```
 python -m http.server 5510            # la app en http://127.0.0.1:5510
 python pruebas/prueba-local.py        # prueba sin Firebase
+node --test pruebas/datos.test.mjs pruebas/recordatorio.test.mjs   # cuentas y aviso
 npm install                           # una sola vez
 npm run probar-reglas                 # prueba las reglas de seguridad
 npm run emuladores                    # en otra terminal, y después:
@@ -49,11 +50,16 @@ python pruebas/prueba-nube.py         # prueba con la nube simulada
 - **Hoy:** marcar los hábitos del día y tildar los pendientes de la semana.
 - **Semana:** la grilla de lunes a domingo y los pendientes de la semana (se puede ir a la que viene para anotar).
 - **Mes:** el mes entero, del 1 al último día: calendario por porcentaje y una tira por hábito.
-- **Hábitos:** editar la lista, respaldo y cuenta.
+- **Hábitos:** editar la lista (nombre, categoría y frecuencia), recordatorio, respaldo y cuenta.
+
+## Recordatorio diario
+
+Lo manda `recordatorio/enviar.mjs`, que corre en GitHub Actions cada 15
+minutos (`.github/workflows/recordatorio.yml`). Necesita el secreto
+`FIREBASE_SERVICE_ACCOUNT` del repositorio (la clave JSON de la cuenta de
+servicio de Firebase) y la `vapidKey` en `firebase-config.js`. GitHub pausa
+las tareas programadas de un repositorio sin cambios durante 60 días: si pasa,
+avisa por mail y se reactiva con un clic en la pestaña Actions.
 
 Si cambiás `firestore.rules`, hay que pegarlas de nuevo en Firebase → Firestore → Reglas → Publicar.
 
-## Para más adelante
-
-- **Recordatorios diarios:** el lugar para los avisos está marcado al final de
-  `sw.js` (Firebase Cloud Messaging).

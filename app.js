@@ -8,6 +8,7 @@ import { todayStr, parse, addDays, weekStartOf, fmtWd, fmtDay, fmtShort, fmtMont
 import { CATS, getVal, streak as streakOf, bestStreak, mergeData, makeBackup, parseBackup, countDays, cleanLogs, monthStats, countTasks,
   freqOf, freqLabel, isScheduled, countsOn, weekCount, periodScore, pct, cleanHabit } from './datos.js';
 import { createStore, readLocalData } from './store.js';
+import { vapidKey } from './firebase-config.js';
 
 var STARTER = [
   ['ejercicio', 'Entrenar 40 minutos'],
@@ -39,6 +40,7 @@ var els = {
   monthEyebrow: $('monthEyebrow'), monthTitle: $('monthTitle'), prevMonth: $('prevMonth'), nextMonth: $('nextMonth'),
   goThisMonth: $('goThisMonth'), monthBody: $('monthBody'),
   addForm: $('addForm'), newName: $('newName'), newCat: $('newCat'), newFreq: $('newFreq'), habitList: $('habitList'),
+  reminderPanel: $('reminderPanel'), remOn: $('remOn'), remTime: $('remTime'), remStatus: $('remStatus'), remTest: $('remTest'),
   exportBtn: $('exportBtn'), importBtn: $('importBtn'), importFile: $('importFile'),
   dialog: $('dialog'), dialogEyebrow: $('dialogEyebrow'), dialogTitle: $('dialogTitle'), dialogText: $('dialogText'),
   dialogOk: $('dialogOk'), dialogCancel: $('dialogCancel'),
@@ -593,6 +595,7 @@ function renderHabitos(force) {
 
 function renderAccount() {
   if (!store) return;
+  renderReminder();
   var u = state.user;
   if (store.mode === 'cloud') {
     els.accountText.innerHTML = u ? 'Entraste como <strong>' + esc(u.email || u.name || 'tu cuenta de Google') + '</strong>.' : '';
@@ -923,6 +926,107 @@ els.signOut.addEventListener('click', async function () {
   if (ok) store.signOut();
 });
 
+/* ---------- recordatorio diario ----------
+   Acá solo se elige la hora y se registra el aparato. El aviso lo manda
+   recordatorio/enviar.mjs desde GitHub Actions, si a esa hora te falta algo. */
+
+var reminder = { enabled: false, time: '21:00', tokens: [] };
+var device = { token: null, busy: false, failed: false, tried: false };
+
+function notifState() { return 'Notification' in window ? Notification.permission : 'unsupported'; }
+function isIOS() { return /iPhone|iPad|iPod/.test(navigator.userAgent); }
+
+function renderReminder() {
+  if (!store || store.mode !== 'cloud' || !state.user) { els.reminderPanel.hidden = true; return; }
+  els.reminderPanel.hidden = false;
+  els.remOn.checked = reminder.enabled;
+  if (document.activeElement !== els.remTime) els.remTime.value = reminder.time;
+  var st = notifState(), msg;
+  var off = !vapidKey || st === 'unsupported' || st === 'denied';
+  els.remOn.disabled = off && !reminder.enabled;
+  if (!vapidKey) msg = 'Falta configurar los avisos en Firebase.';
+  else if (st === 'unsupported') msg = isIOS() ? 'En iPhone los avisos funcionan con la app instalada: Compartir › Agregar a inicio, y activalos desde ahí.' : 'Este navegador no puede mostrar avisos.';
+  else if (st === 'denied') msg = 'Las notificaciones están bloqueadas para este sitio. Activalas en los ajustes del navegador y volvé a intentar.';
+  else if (!reminder.enabled) msg = 'Apagado.';
+  else if (device.busy) msg = 'Registrando este aparato…';
+  else if (device.failed) msg = 'Activado a las ' + reminder.time + ', pero este aparato no se pudo registrar. Apagalo y prendelo para probar de nuevo.';
+  else if (st !== 'granted' || !device.token) msg = 'Activado a las ' + reminder.time + '. Para recibirlo en este aparato, apagalo y prendelo acá.';
+  else msg = 'Activado: si a las ' + reminder.time + ' te falta marcar algo, te aviso. Puede llegar hasta 20 minutos después.';
+  els.remStatus.textContent = msg;
+  els.remTest.hidden = st !== 'granted';
+}
+
+async function registerDevice(quiet) {
+  if (device.busy) return;
+  device.busy = true; device.failed = false; device.tried = true;
+  renderReminder();
+  try {
+    if (!('serviceWorker' in navigator)) throw new Error('sin-service-worker');
+    var reg = await navigator.serviceWorker.ready;
+    device.token = await store.registerDevice(vapidKey, reg);
+    if (!quiet) say('Listo: te aviso a las ' + reminder.time + ' si te falta algo.');
+  } catch (e) {
+    console.warn('No se pudo registrar el aparato para avisos:', e);
+    device.failed = true;
+    if (!quiet) say('No se pudo registrar este aparato para recibir avisos.', true);
+  } finally {
+    device.busy = false;
+    renderReminder();
+  }
+}
+
+function startReminder() {
+  if (store.mode !== 'cloud') return;
+  store.watchReminder(function (r) {
+    reminder = r;
+    renderReminder();
+    // Si ya está activado y este aparato dio permiso, se renueva su registro
+    // en silencio una vez por sesión (el token puede cambiar con el tiempo).
+    if (r.enabled && vapidKey && notifState() === 'granted' && !device.tried) registerDevice(true);
+  });
+}
+
+els.remOn.addEventListener('change', async function () {
+  if (!els.remOn.checked) {
+    reminder.enabled = false;
+    store.saveReminder({ enabled: false }).catch(saveError);
+    renderReminder();
+    return;
+  }
+  if (!vapidKey || notifState() === 'unsupported') { els.remOn.checked = false; renderReminder(); return; }
+  var perm = await Notification.requestPermission();
+  if (perm !== 'granted') {
+    els.remOn.checked = false;
+    renderReminder();
+    say('Sin permiso para notificaciones no puedo avisarte.', true);
+    return;
+  }
+  var time = /^\d{2}:\d{2}$/.test(els.remTime.value) ? els.remTime.value : '21:00';
+  reminder.enabled = true; reminder.time = time;
+  store.saveReminder({ enabled: true, time: time }).catch(saveError);
+  registerDevice(false);
+});
+els.remTime.addEventListener('change', function () {
+  var time = els.remTime.value;
+  if (!/^\d{2}:\d{2}$/.test(time)) return;
+  reminder.time = time;
+  store.saveReminder({ time: time }).catch(saveError);
+  renderReminder();
+  if (reminder.enabled) say('Aviso a las ' + time + '.');
+});
+els.remTest.addEventListener('click', async function () {
+  try {
+    var reg = await navigator.serviceWorker.ready;
+    await reg.showNotification('Mis hábitos', {
+      body: 'Así se ven los avisos. El de verdad llega solo si te falta marcar algo.',
+      icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', tag: 'prueba'
+    });
+  } catch (e) {
+    console.warn(e);
+    say('No se pudo mostrar el aviso de prueba.', true);
+  }
+});
+
 /* ---------- conexión y cambio de día ---------- */
 
 window.addEventListener('online', function () { state.online = true; renderAccount(); say('Conexión recuperada. Sincronizando…'); });
@@ -1005,12 +1109,14 @@ async function boot() {
     showLogin(false);
     if (prevUid === user.uid) return;
     store.stop();
+    device = { token: null, busy: false, failed: false, tried: false };
     store.start(onData, function (e) {
       console.error(e);
       state.ready = true;
       render();
       say('No se pudieron leer tus datos. Recargá la página.', true);
     });
+    startReminder();
   });
 }
 boot();

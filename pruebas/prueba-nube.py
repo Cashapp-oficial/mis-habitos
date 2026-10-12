@@ -15,7 +15,7 @@ BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:5510/"
 URL = BASE + "?emulador=1"
 PROYECTO = "demo-habitos"
 CONFIG = ('export const firebaseConfig = { apiKey: "demo-key", authDomain: "127.0.0.1", '
-          f'projectId: "{PROYECTO}", appId: "demo-app" }};')
+          f'projectId: "{PROYECTO}", appId: "demo-app" }}; export const vapidKey = "demo-vapid";')
 errores = []
 
 
@@ -149,6 +149,55 @@ with sync_playwright() as pw:
     if not llego:
         falla("el pendiente no llegó a la nube")
     ok("un pendiente de la semana se guarda en la nube")
+    page.click('.tab[data-tab="hoy"]')
+
+    # 3c. Recordatorio: el panel guarda la hora y el interruptor en la nube.
+    # El Chromium sin ventana de las pruebas rechaza siempre las notificaciones:
+    # se simula que la persona dio permiso.
+    page.evaluate("""() => { window.Notification = { permission: 'granted', requestPermission: async () => 'granted' }; }""")
+    page.click('.tab[data-tab="habitos"]')
+    page.wait_for_selector("#reminderPanel:not([hidden])")
+    page.fill("#remTime", "08:30")
+    page.locator("#remTime").dispatch_event("change")
+    page.click(".interruptor")
+    page.wait_for_function("document.getElementById('remStatus').textContent.indexOf('Activado') === 0")
+    ok("recordatorio: " + page.text_content("#remStatus"))
+    rem = None
+    for _ in range(30):
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:8080/v1/projects/{PROYECTO}/databases/(default)/documents/users/{uid}/config/reminder",
+                headers={"Authorization": "Bearer owner"})
+            rem = json.loads(urllib.request.urlopen(req).read())["fields"]
+            if rem.get("enabled", {}).get("booleanValue") and rem.get("time", {}).get("stringValue") == "08:30":
+                break
+        except urllib.error.HTTPError:
+            pass
+        page.wait_for_timeout(500)
+    if not rem or rem.get("time", {}).get("stringValue") != "08:30":
+        falla("el recordatorio no quedó guardado en la nube: " + json.dumps(rem))
+    ok("el recordatorio quedó guardado: activado a las 08:30")
+
+    # El programa que manda avisos, en modo prueba contra el emulador. Se le
+    # agrega un aparato de mentira (en la compu no hay servicio de avisos real).
+    import os, subprocess
+    req = urllib.request.Request(
+        f"http://127.0.0.1:8080/v1/projects/{PROYECTO}/databases/(default)/documents/users/{uid}/config/reminder?updateMask.fieldPaths=tokens",
+        data=json.dumps({"fields": {"tokens": {"arrayValue": {"values": [{"stringValue": "aparato-de-prueba"}]}}}}).encode(),
+        headers={"Authorization": "Bearer owner", "Content-Type": "application/json"}, method="PATCH")
+    urllib.request.urlopen(req)
+    hoy = page.evaluate("new Intl.DateTimeFormat('en-CA',{timeZone:'America/Buenos_Aires'}).format(new Date())")
+    env = dict(os.environ, FIRESTORE_EMULATOR_HOST="127.0.0.1:8080", PROYECTO=PROYECTO, DRY_RUN="1",
+               AHORA=hoy + "T08:40:00-03:00")
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    salida = subprocess.run(["node", "recordatorio/enviar.mjs"], cwd=raiz, env=env, capture_output=True, text=True, encoding="utf-8")
+    if "AVISO" not in salida.stdout:
+        falla("el programa del recordatorio no armó el aviso: " + salida.stdout + salida.stderr)
+    ok("a las 08:40 arma el aviso: " + salida.stdout.strip().split("AVISO ", 1)[1])
+    salida2 = subprocess.run(["node", "recordatorio/enviar.mjs"], cwd=raiz, env=env, capture_output=True, text=True, encoding="utf-8")
+    if "AVISO" in salida2.stdout:
+        falla("avisó dos veces el mismo día")
+    ok("no avisa dos veces el mismo día")
     page.click('.tab[data-tab="hoy"]')
 
     # 4. Sin conexión: marcar y que se suba al volver.

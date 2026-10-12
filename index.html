@@ -127,6 +127,24 @@
 
     <svg class="guarda" data-guarda viewBox="0 0 354 12" preserveAspectRatio="none" aria-hidden="true"></svg>
 
+    <section class="vidrio panel" id="reminderPanel" aria-labelledby="recordatorioTitulo" hidden>
+      <p class="rotulo orn" id="recordatorioTitulo">Recordatorio</p>
+      <p class="panel-texto">Un aviso por día, a la hora que elijas, solo si te falta marcar algo de ese día.</p>
+      <div class="recordatorio-fila">
+        <label class="interruptor">
+          <input type="checkbox" id="remOn" role="switch">
+          <span class="interruptor-pista" aria-hidden="true"></span>
+          <span>Avisarme</span>
+        </label>
+        <label class="sr-only" for="remTime">Hora del aviso</label>
+        <input type="time" id="remTime" class="field hora" value="21:00" step="900">
+      </div>
+      <p class="panel-texto" id="remStatus"></p>
+      <div class="panel-botones">
+        <button type="button" id="remTest" class="btn">Probar aviso en este aparato</button>
+      </div>
+    </section>
+
     <section class="vidrio panel" aria-labelledby="respaldoTitulo">
       <p class="rotulo orn" id="respaldoTitulo">Respaldo</p>
       <p class="panel-texto">Bajá todo tu historial en un archivo para guardarlo donde quieras. Si algún día lo necesitás, lo volvés a cargar desde acá.</p>

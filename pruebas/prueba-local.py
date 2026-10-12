@@ -24,7 +24,7 @@ with sync_playwright() as p:
     ctx = nav.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2,
                           is_mobile=True, has_touch=True, timezone_id="Asia/Tokyo", accept_downloads=True)
     # Modo local: sin la configuración real de Firebase.
-    ctx.route("**/firebase-config.js", lambda r: r.fulfill(body="export const firebaseConfig = null;", content_type="text/javascript"))
+    ctx.route("**/firebase-config.js", lambda r: r.fulfill(body="export const firebaseConfig = null; export const vapidKey = null;", content_type="text/javascript"))
     page = ctx.new_page()
     page.on("console", lambda m: errores.append(m.text) if m.type == "error" else None)
     page.on("pageerror", lambda e: errores.append(str(e)))

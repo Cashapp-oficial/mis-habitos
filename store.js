@@ -12,6 +12,7 @@
     users/{uid}/config/habits   { items: [{ id, name, cat }] }
     users/{uid}/logs/{AAAA-MM}  { days: { "AAAA-MM-DD": { idHabito: 1 | 0 } } }
     users/{uid}/tasks/{lunes}   { items: [{ id, text, done }] }   pendientes de esa semana
+    users/{uid}/config/reminder { enabled, time: "HH:MM", tokens: [...], lastSent }   el aviso diario
 */
 
 import { firebaseConfig } from './firebase-config.js';
@@ -54,6 +55,8 @@ function localStore() {
     signIn: function () { return Promise.resolve(); },
     signOut: function () { return Promise.resolve(); },
     start: function (onData) { listener = onData; emit(); },
+    // Sin cuenta no hay avisos: los manda un servidor que lee tu cuenta.
+    watchReminder: function () { return function () {}; },
     stop: function () { listener = null; },
     saveHabits: function (habits) {
       data.habits = habits;
@@ -115,10 +118,11 @@ async function cloudStore() {
     fs.connectFirestoreEmulator(db, '127.0.0.1', 8080);
   }
 
-  var user = null, unsubs = [];
+  var user = null, unsubs = [], messaging = null;
   function habitsRef() { return fs.doc(db, 'users', user.uid, 'config', 'habits'); }
   function monthRef(mk) { return fs.doc(db, 'users', user.uid, 'logs', mk); }
   function weekRef(w) { return fs.doc(db, 'users', user.uid, 'tasks', w); }
+  function reminderRef() { return fs.doc(db, 'users', user.uid, 'config', 'reminder'); }
 
   return {
     mode: 'cloud',
@@ -165,6 +169,29 @@ async function cloudStore() {
       }, onError));
     },
     stop: function () { unsubs.forEach(function (u) { u(); }); unsubs = []; },
+
+    /* ---------- recordatorio diario ---------- */
+    watchReminder: function (cb) {
+      var un = fs.onSnapshot(reminderRef(), function (snap) {
+        var d = snap.exists() ? snap.data() : {};
+        cb({ enabled: d.enabled === true, time: typeof d.time === 'string' ? d.time : '21:00', tokens: Array.isArray(d.tokens) ? d.tokens : [] });
+      }, function (e) { console.warn('recordatorio:', e); });
+      unsubs.push(un);
+      return un;
+    },
+    saveReminder: function (fields) {
+      return fs.setDoc(reminderRef(), fields, { merge: true });
+    },
+    /** Registra este aparato para recibir avisos y guarda su dirección (token). */
+    registerDevice: async function (vapidKey, swRegistration) {
+      var ms = await import(SDK + 'firebase-messaging.js');
+      if (!(await ms.isSupported())) throw new Error('no-soportado');
+      messaging = messaging || ms.getMessaging(app);
+      var token = await ms.getToken(messaging, { vapidKey: vapidKey, serviceWorkerRegistration: swRegistration });
+      if (!token) throw new Error('sin-token');
+      await fs.setDoc(reminderRef(), { tokens: fs.arrayUnion(token) }, { merge: true });
+      return token;
+    },
 
     // Sin conexión, estas promesas quedan esperando hasta que vuelve; la
     // pantalla ya se actualizó con la copia local, así que no se esperan.
