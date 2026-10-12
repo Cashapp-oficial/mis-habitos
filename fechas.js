@@ -48,3 +48,4 @@ export var fmtWd = new Intl.DateTimeFormat('es-AR', { weekday: 'long', timeZone:
 export var fmtDay = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'long', timeZone: 'UTC' });
 export var fmtShort = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 export var fmtMonth = new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+export var fmtMonthName = new Intl.DateTimeFormat('es-AR', { month: 'long', timeZone: 'UTC' });

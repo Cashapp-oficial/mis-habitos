@@ -98,7 +98,7 @@
       <div class="top-text">
         <p class="rotulo orn">Tu lista</p>
         <h1 class="d">Mis hábitos</h1>
-        <p class="lede">Cambiá nombres, orden y categoría. Si eliminás un hábito, deja de aparecer pero se conservan las marcas pasadas.</p>
+        <p class="lede">Cambiá nombres, orden, categoría y cada cuánto lo hacés. Si eliminás un hábito, deja de aparecer pero se conservan las marcas pasadas.</p>
       </div>
     </div>
     <form id="addForm" class="add vidrio" autocomplete="off">
@@ -109,6 +109,17 @@
         <option value="ejercicio">Ejercicio</option>
         <option value="cuidado">Cuidado personal</option>
         <option value="trabajo">Trabajo</option>
+      </select>
+      <label class="sr-only" for="newFreq">Frecuencia del nuevo hábito</label>
+      <select id="newFreq" class="field">
+        <option value="daily">Todos los días</option>
+        <option value="w1">1 vez por semana</option>
+        <option value="w2">2 veces por semana</option>
+        <option value="w3">3 veces por semana</option>
+        <option value="w4">4 veces por semana</option>
+        <option value="w5">5 veces por semana</option>
+        <option value="w6">6 veces por semana</option>
+        <option value="days">Días fijos (L a V)</option>
       </select>
       <button type="submit" class="btn primary">Añadir</button>
     </form>

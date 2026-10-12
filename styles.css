@@ -652,3 +652,43 @@ select.field option { background: #1b1b1d; color: var(--texto); }
 @media (prefers-reduced-motion: reduce) {
   .check, .check svg, .tab, .icon-btn { transition: none; }
 }
+
+/* ---------- Frecuencia, récord y comparación ---------- */
+
+/* Días fijos: el día que no toca, el hábito se ve apagado (se puede marcar igual). */
+.habit.off-day .check { border-style: dashed; opacity: 0.45; }
+.habit.off-day .h-name { color: var(--apagado); }
+.dot.off { width: 4px; height: 4px; margin: 2px; }
+.semanal { font: 500 11px var(--font-data); letter-spacing: 0.04em; color: var(--c); }
+.no-toca { font: 500 11px var(--font-data); letter-spacing: 0.04em; color: var(--apagado); }
+.record { font: 500 11px var(--font-data); letter-spacing: 0.04em; color: var(--apagado); }
+.record.top { color: var(--ambar); }
+.record.top::before { content: ""; display: inline-block; width: 5px; height: 5px; margin: 0 6px 1px 0; border: 1px solid var(--ambar); transform: rotate(45deg); }
+
+.cell.off { border-style: dashed; opacity: 0.35; }
+.week .w-meta { display: block; font: 500 10px var(--font-data); color: var(--apagado); letter-spacing: 0.04em; }
+.tira i.off { background: transparent; box-shadow: none; position: relative; }
+.tira i.off::after { content: ""; position: absolute; left: 50%; top: 50%; width: 2px; height: 2px; border-radius: 50%; background: var(--apagado); transform: translate(-50%, -50%); }
+
+#weekSummary strong { color: var(--texto); font-weight: 600; }
+.sube { color: var(--verde); }
+.baja { color: var(--ambar); }
+.comparacion { font: 500 12px var(--font-data); letter-spacing: 0.04em; color: var(--tenue); }
+.comparacion.sube { color: var(--verde); }
+.comparacion.baja { color: var(--ambar); }
+
+.freq-row { display: flex; align-items: center; gap: 10px; }
+.freq-label { flex: none; font: 500 11px var(--font-data); letter-spacing: 0.08em; text-transform: uppercase; color: var(--apagado); }
+.freq-row .field { flex: 1; min-width: 0; height: 42px; }
+.dias { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.dia {
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--linea-fuerte);
+  background: transparent;
+  color: var(--tenue);
+  font: 500 13px var(--font-data);
+  cursor: pointer;
+}
+.dia.on { background: var(--c); border-color: var(--c); color: var(--sobre-color); }
+.add #newFreq { flex: 1 1 100%; }

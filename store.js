@@ -15,7 +15,7 @@
 */
 
 import { firebaseConfig } from './firebase-config.js';
-import { validHabit, cleanTasks } from './datos.js';
+import { validHabit, cleanHabit, cleanTasks } from './datos.js';
 
 var SDK = 'https://www.gstatic.com/firebasejs/12.19.0/';
 
@@ -171,7 +171,7 @@ async function cloudStore() {
     // Solo avisan si el servidor rechaza el cambio.
     saveHabits: function (habits) {
       return fs.setDoc(habitsRef(), {
-        items: habits.map(function (h) { return { id: h.id, name: h.name, cat: h.cat }; })
+        items: habits.map(cleanHabit)
       });
     },
     // Se escribe solo esa marca (no el mes entero): si marcás en el celular y
@@ -190,7 +190,7 @@ async function cloudStore() {
     applyMerge: function (habits, patch, tasksPatch) {
       var batch = fs.writeBatch(db);
       Object.keys(tasksPatch || {}).forEach(function (w) { batch.set(weekRef(w), { items: tasksPatch[w] }); });
-      batch.set(habitsRef(), { items: habits.map(function (h) { return { id: h.id, name: h.name, cat: h.cat }; }) });
+      batch.set(habitsRef(), { items: habits.map(cleanHabit) });
       Object.keys(patch).forEach(function (mk) {
         batch.set(monthRef(mk), { days: patch[mk] }, { merge: true });
       });

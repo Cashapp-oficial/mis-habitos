@@ -4,8 +4,9 @@
   datos.js y las fechas (siempre de Buenos Aires) en fechas.js.
 */
 
-import { todayStr, parse, addDays, weekStartOf, fmtWd, fmtDay, fmtShort, fmtMonth, pad } from './fechas.js';
-import { CATS, getVal, streak as streakOf, mergeData, makeBackup, parseBackup, countDays, cleanLogs, monthStats, countTasks } from './datos.js';
+import { todayStr, parse, addDays, weekStartOf, fmtWd, fmtDay, fmtShort, fmtMonth, fmtMonthName, pad } from './fechas.js';
+import { CATS, getVal, streak as streakOf, bestStreak, mergeData, makeBackup, parseBackup, countDays, cleanLogs, monthStats, countTasks,
+  freqOf, freqLabel, isScheduled, countsOn, weekCount, periodScore, pct, cleanHabit } from './datos.js';
 import { createStore, readLocalData } from './store.js';
 
 var STARTER = [
@@ -37,7 +38,7 @@ var els = {
   weekSummary: $('weekSummary'), weekGrid: $('weekGrid'),
   monthEyebrow: $('monthEyebrow'), monthTitle: $('monthTitle'), prevMonth: $('prevMonth'), nextMonth: $('nextMonth'),
   goThisMonth: $('goThisMonth'), monthBody: $('monthBody'),
-  addForm: $('addForm'), newName: $('newName'), newCat: $('newCat'), habitList: $('habitList'),
+  addForm: $('addForm'), newName: $('newName'), newCat: $('newCat'), newFreq: $('newFreq'), habitList: $('habitList'),
   exportBtn: $('exportBtn'), importBtn: $('importBtn'), importFile: $('importFile'),
   dialog: $('dialog'), dialogEyebrow: $('dialogEyebrow'), dialogTitle: $('dialogTitle'), dialogText: $('dialogText'),
   dialogOk: $('dialogOk'), dialogCancel: $('dialogCancel'),
@@ -108,7 +109,32 @@ function ordered() {
   return out;
 }
 function val(date, id) { return getVal(state.logs, date, id); }
-function streak(id, date) { return streakOf(state.logs, id, date); }
+function counts(h, date) { return countsOn(state.logs, h, date); }
+
+/* Frecuencia en el editor: el valor del <select> y de vuelta. */
+var FREQ_OPTS = [['daily', 'Todos los días'], ['w1', '1 vez por semana'], ['w2', '2 veces por semana'], ['w3', '3 veces por semana'],
+  ['w4', '4 veces por semana'], ['w5', '5 veces por semana'], ['w6', '6 veces por semana'], ['days', 'Días fijos']];
+function freqValue(h) {
+  var f = freqOf(h);
+  return f.type === 'weekly' ? 'w' + f.times : f.type;
+}
+function freqFrom(value, prev) {
+  if (value === 'days') {
+    var p = prev && freqOf({ freq: prev });
+    return { type: 'days', days: p && p.type === 'days' ? p.days : [0, 1, 2, 3, 4] };
+  }
+  if (/^w[1-6]$/.test(value)) return { type: 'weekly', times: Number(value.slice(1)) };
+  return null;
+}
+function freqOptions(selected) {
+  return FREQ_OPTS.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === selected ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('');
+}
+function unit(s) { return s.unit === 'sem' ? (s.n === 1 ? 'semana' : 'semanas') : (s.n === 1 ? 'día' : 'días'); }
+function compareText(now, before, period) {
+  if (now === null || before === null) return '';
+  var dlt = now - before;
+  return dlt === 0 ? 'igual que ' + period : (dlt > 0 ? '▲ ' + dlt + ' puntos más' : '▼ ' + (-dlt) + ' puntos menos') + ' que ' + period;
+}
 
 function setVal(date, id, v) {
   var mk = date.slice(0, 7);
@@ -119,7 +145,7 @@ function setVal(date, id, v) {
   store.setMark(date, id, v).catch(saveError);
 }
 function persistHabits() {
-  store.saveHabits(state.habits.map(function (h) { return { id: h.id, name: h.name, cat: h.cat }; })).catch(saveError);
+  store.saveHabits(state.habits.map(cleanHabit)).catch(saveError);
 }
 function tasksOf(week) { return state.tasks[week] || []; }
 function saveTasks(week, items) {
@@ -172,20 +198,31 @@ function emptyHtml(withLink) {
 }
 
 function habitRow(h, d) {
-  var v = val(d, h.id);
+  var v = val(d, h.id), f = freqOf(h);
   var st = v === 1 ? 'done' : v === 0 ? 'miss' : '';
   var name = esc(h.name);
-  var s = streak(h.id, d);
+  var off = f.type === 'days' && !isScheduled(h, d) && v !== 1;
+  var s = streakOf(state.logs, h, d), best = bestStreak(state.logs, h, d);
   var dots = '';
   for (var i = 6; i >= 0; i--) {
-    var x = val(addDays(d, -i), h.id);
-    dots += '<span class="dot' + (x === 1 ? ' done' : x === 0 ? ' miss' : '') + (i === 0 ? ' cur' : '') + '"></span>';
+    var dd = addDays(d, -i), x = val(dd, h.id);
+    dots += '<span class="dot' + (x === 1 ? ' done' : x === 0 ? ' miss' : '') +
+      (f.type === 'days' && !isScheduled(h, dd) && x !== 1 ? ' off' : '') + (i === 0 ? ' cur' : '') + '"></span>';
   }
-  return '<li class="habit' + (st ? ' state-' + st : '') + '">' +
+  var meta = '';
+  if (f.type === 'weekly') {
+    meta += '<span class="semanal">' + weekCount(state.logs, h, weekStartOf(d), d) + ' de ' + f.times + (d === state.today ? ' esta semana' : ' esa semana') + '</span>';
+  }
+  if (off) meta += '<span class="no-toca">' + (d === state.today ? 'hoy no toca' : 'no tocaba') + '</span>';
+  // En los de "X por semana", "sin racha" no suma nada al lado de "2 de 3 esta semana".
+  if (s.n || f.type !== 'weekly') meta += '<span class="streak' + (s.n ? ' on' : '') + '">' + (s.n ? 'racha ' + s.n + ' ' + unit(s) : 'sin racha') + '</span>';
+  if (best.n >= 2) {
+    meta += s.n === best.n ? '<span class="record top">tu récord</span>' : '<span class="record">récord ' + best.n + '</span>';
+  }
+  return '<li class="habit' + (st ? ' state-' + st : '') + (off ? ' off-day' : '') + '">' +
     '<button type="button" class="check" data-act="done" data-id="' + h.id + '" aria-pressed="' + (v === 1) + '" aria-label="' + name + ': hecho">' + CHECK + '</button>' +
     '<div class="h-body"><p class="h-name">' + name + '</p>' +
-    '<div class="h-meta"><span class="dots" aria-hidden="true">' + dots + '</span>' +
-    '<span class="streak' + (s ? ' on' : '') + '">' + (s ? 'racha ' + s + ' d' : 'sin racha') + '</span></div></div>' +
+    '<div class="h-meta"><span class="dots" aria-hidden="true">' + dots + '</span>' + meta + '</div></div>' +
     '<button type="button" class="x-btn" data-act="miss" data-id="' + h.id + '" aria-pressed="' + (v === 0) + '" aria-label="' + name + ': no lo hice" title="No lo hice">' + XMARK + '</button>' +
     '</li>';
 }
@@ -212,27 +249,31 @@ function renderHoy() {
     return;
   }
 
+  // Cuentan los que tocan ese día y los que hiciste igual.
+  var due = list.filter(function (h) { return counts(h, d); });
   var done = 0, miss = 0, segs = '';
-  list.forEach(function (h) {
+  due.forEach(function (h) {
     var v = val(d, h.id);
     if (v === 1) done++; else if (v === 0) miss++;
     segs += '<span class="seg cat-' + h.cat + (v === 1 ? ' done' : v === 0 ? ' miss' : '') + '"></span>';
   });
-  var label = 'hechos ' + (d === t ? 'hoy' : 'ese día') + (miss ? ' · ' + miss + ' no hecho' + (miss > 1 ? 's' : '') : '');
+  var label = !due.length ? (d === t ? 'hoy no te toca ningún hábito' : 'ese día no tocaba ningún hábito') :
+    'hechos ' + (d === t ? 'hoy' : 'ese día') + (miss ? ' · ' + miss + ' no hecho' + (miss > 1 ? 's' : '') : '');
   els.summary.innerHTML =
     '<div class="sum-hero"><svg class="roseta" viewBox="0 0 300 300" aria-hidden="true">' + ROSETA + '</svg>' +
-    '<span class="big">' + done + '<span class="of">/' + list.length + '</span></span>' +
+    '<span class="big">' + done + '<span class="of">/' + due.length + '</span></span>' +
     '<span class="sum-sub">' + label + '</span>' +
     '<span class="micro" aria-hidden="true">' + MICRO + '</span></div>' +
-    '<div class="tally" role="img" aria-label="' + done + ' de ' + list.length + ' hábitos hechos">' + segs + '</div>' +
+    (due.length ? '<div class="tally" role="img" aria-label="' + done + ' de ' + due.length + ' hábitos hechos">' + segs + '</div>' : '') +
     '<p class="hint">Círculo: lo hice. X: no lo hice. Los puntos son los últimos 7 días.</p>';
 
   els.hoyList.innerHTML = CATS.map(function (c) {
     var hs = list.filter(function (h) { return h.cat === c.key; });
     if (!hs.length) return '';
     var n = hs.filter(function (h) { return val(d, h.id) === 1; }).length;
+    var nd = hs.filter(function (h) { return counts(h, d); }).length;
     return '<section class="cat vidrio cat-' + c.key + '" aria-labelledby="cat-' + c.key + '">' +
-      '<header class="cat-head"><h2 id="cat-' + c.key + '">' + c.label + '</h2><span class="count">' + n + '/' + hs.length + '</span></header>' +
+      '<header class="cat-head"><h2 id="cat-' + c.key + '">' + c.label + '</h2><span class="count">' + n + '/' + nd + '</span></header>' +
       '<ul class="habits">' + hs.map(function (h) { return habitRow(h, d); }).join('') + '</ul></section>';
   }).join('');
 }
@@ -269,11 +310,15 @@ function renderSemana() {
     if (!hs.length) return;
     body += '<tr class="cat-' + c.key + ' cat-row"><th colspan="8" scope="colgroup">' + c.label + '</th></tr>';
     hs.forEach(function (h) {
-      body += '<tr class="cat-' + c.key + '"><th scope="row" class="w-name" title="' + esc(h.name) + '">' + esc(h.name) + '</th>';
+      var f = freqOf(h);
+      var wmeta = f.type === 'weekly' ? weekCount(state.logs, h, ws, t) + ' de ' + f.times : f.type === 'days' ? freqLabel(h) : '';
+      body += '<tr class="cat-' + c.key + '"><th scope="row" class="w-name" title="' + esc(h.name) + '">' + esc(h.name) +
+        (wmeta ? '<span class="w-meta">' + wmeta + '</span>' : '') + '</th>';
       days.forEach(function (d) {
         var v = val(d, h.id), future = d > t;
-        var stateTxt = v === 1 ? 'hecho' : v === 0 ? 'no hecho' : 'sin marcar';
-        body += '<td><button type="button" class="cell' + (v === 1 ? ' done' : v === 0 ? ' miss' : '') + '" data-id="' + h.id + '" data-date="' + d + '"' +
+        var off = f.type === 'days' && !isScheduled(h, d) && v !== 1;
+        var stateTxt = v === 1 ? 'hecho' : v === 0 ? 'no hecho' : off ? 'no toca' : 'sin marcar';
+        body += '<td><button type="button" class="cell' + (v === 1 ? ' done' : v === 0 ? ' miss' : '') + (off ? ' off' : '') + '" data-id="' + h.id + '" data-date="' + d + '"' +
           (future ? ' disabled' : '') + ' aria-label="' + esc(h.name) + ', ' + fmtShort.format(parse(d)) + ': ' + stateTxt + '">' +
           (v === 1 ? CHECK : v === 0 ? XMARK : '') + '</button></td>';
       });
@@ -281,16 +326,18 @@ function renderSemana() {
     });
   });
 
-  var possible = 0, doneAll = 0;
   var foot = '<tr><th scope="row">Cumplido</th>' + days.map(function (d) {
     if (d > t) return '<td>·</td>';
-    var n = 0;
-    list.forEach(function (h) { if (val(d, h.id) === 1) n++; });
-    possible += list.length; doneAll += n;
-    return '<td>' + Math.round(n / list.length * 100) + '%</td>';
+    var n = 0, due = 0;
+    list.forEach(function (h) { if (counts(h, d)) { due++; if (val(d, h.id) === 1) n++; } });
+    return '<td>' + (due ? Math.round(n / due * 100) + '%' : '–') + '</td>';
   }).join('') + '</tr>';
 
-  els.weekSummary.textContent = possible ? Math.round(doneAll / possible * 100) + '% cumplido · ' + doneAll + ' de ' + possible + ' posibles' : '';
+  // Contra lo que te propusiste (los de "X por semana" cuentan su meta) y contra la semana anterior.
+  var now = ws <= t ? pct(periodScore(state.logs, list, ws, addDays(ws, 6) < t ? addDays(ws, 6) : t)) : null;
+  var before = pct(periodScore(state.logs, list, addDays(ws, -7), addDays(ws, -1)));
+  els.weekSummary.innerHTML = now === null ? '' : '<strong>' + now + '% cumplido</strong>' +
+    (compareText(now, before, 'la semana anterior') ? ' · <span class="' + (now > before ? 'sube' : now < before ? 'baja' : '') + '">' + compareText(now, before, 'la semana anterior') + '</span>' : '');
   els.weekGrid.innerHTML = '<table class="week"><colgroup><col class="name">' + days.map(function () { return '<col>'; }).join('') + '</colgroup>' +
     '<thead>' + head + '</thead><tbody>' + body + '</tbody><tfoot>' + foot + '</tfoot></table>';
 }
@@ -323,16 +370,21 @@ function renderMes() {
 
   var total = daysInMonth(mk);
   var stats = monthStats(state.logs, list, mk, t); // solo hasta hoy
-  var past = stats.length, possible = past * list.length;
-  var doneAll = stats.reduce(function (a, s) { return a + s.done; }, 0);
-  var full = stats.filter(function (s) { return s.pct === 1; }).length;
-  var pctAll = possible ? Math.round(doneAll / possible * 100) : 0;
+  var past = stats.length;
+  var last = mk + '-' + pad(total);
+  var score = periodScore(state.logs, list, mk + '-01', last < t ? last : t);
+  var pctAll = pct(score) || 0, doneAll = score.marks;
+  var full = stats.filter(function (s) { return s.due && s.done === s.due; }).length;
+  var prevMk = addMonths(mk, -1);
+  var before = pct(periodScore(state.logs, list, prevMk + '-01', prevMk + '-' + pad(daysInMonth(prevMk))));
+  var cmp = past ? compareText(pctAll, before, fmtMonthName.format(parse(prevMk + '-01'))) : '';
 
   var summary = '<div class="mes-resumen">' +
     '<div><span class="mes-num">' + pctAll + '<small>%</small></span><span class="rotulo">cumplido</span></div>' +
-    '<div><span class="mes-num">' + doneAll + '<small>/' + possible + '</small></span><span class="rotulo">hechos</span></div>' +
+    '<div><span class="mes-num">' + doneAll + '</span><span class="rotulo">hechos</span></div>' +
     '<div><span class="mes-num">' + full + '</span><span class="rotulo">días completos</span></div>' +
     '</div>' +
+    (cmp ? '<p class="comparacion ' + (pctAll > before ? 'sube' : pctAll < before ? 'baja' : '') + '">' + cmp + '</p>' : '') +
     '<p class="hint">' + (past === total ? 'Los ' + total + ' días del mes.' : 'Del 1 al ' + past + ' de ' + total + ' días. Se completa a medida que pasa el mes.') + '</p>';
 
   // Calendario: lunes primero, como la semana.
@@ -343,7 +395,7 @@ function renderMes() {
     var date = mk + '-' + pad(i), future = date > t;
     var st = stats[i - 1];
     var lvl = future || !st.done ? 0 : st.pct === 1 ? 4 : st.pct >= 0.67 ? 3 : st.pct >= 0.34 ? 2 : 1;
-    var lbl = fmtDay.format(parse(date)) + (future ? '' : ': ' + st.done + ' de ' + list.length + ' hechos');
+    var lbl = fmtDay.format(parse(date)) + (future ? '' : st.due ? ': ' + st.done + ' de ' + st.due + ' hechos' : ': no tocaba nada');
     cal += '<button type="button" class="cal-dia n' + lvl + (date === t ? ' hoy' : '') + '" data-date="' + date + '"' +
       (future ? ' disabled' : '') + ' aria-label="' + lbl + '"><span>' + i + '</span>' +
       (!future && st.done ? '<small>' + Math.round(st.pct * 100) + '%</small>' : '') + '</button>';
@@ -356,15 +408,20 @@ function renderMes() {
     if (!hs.length) return '';
     return '<section class="cat vidrio cat-' + c.key + '"><header class="cat-head"><h2>' + c.label + '</h2></header>' +
       '<ul class="habits">' + hs.map(function (h) {
-        var n = 0, cells = '';
+        var n = 0, due = 0, cells = '', f = freqOf(h);
         for (var d = 1; d <= total; d++) {
-          var date = mk + '-' + pad(d), v = val(date, h.id);
+          var date = mk + '-' + pad(d), v = val(date, h.id), sch = isScheduled(h, date);
           if (v === 1) n++;
-          cells += '<i class="' + (date > t ? 'fut' : v === 1 ? 'done' : v === 0 ? 'miss' : '') + (date === t ? ' cur' : '') + '"></i>';
+          if (sch && date <= t) due++;
+          cells += '<i class="' + (date > t ? 'fut' : v === 1 ? 'done' : v === 0 ? 'miss' : '') +
+            (f.type === 'days' && !sch && v !== 1 ? ' off' : '') + (date === t ? ' cur' : '') + '"></i>';
         }
+        var txt = f.type === 'weekly' ? n + (n === 1 ? ' vez' : ' veces') + ' · meta ' + f.times + ' por semana' :
+          f.type === 'days' ? n + ' de ' + due + (due === 1 ? ' día que tocaba' : ' días que tocaban') :
+          n + ' de ' + past + (past === 1 ? ' día' : ' días');
         return '<li class="mes-habito"><div class="mes-habito-cab"><p class="h-name">' + esc(h.name) + '</p>' +
-          '<span class="count">' + n + ' de ' + past + (past === 1 ? ' día' : ' días') + '</span></div>' +
-          '<div class="tira" role="img" aria-label="' + esc(h.name) + ': ' + n + ' de ' + past + ' días hechos">' + cells + '</div></li>';
+          '<span class="count">' + txt + '</span></div>' +
+          '<div class="tira" role="img" aria-label="' + esc(h.name) + ': ' + txt + '">' + cells + '</div></li>';
       }).join('') + '</ul></section>';
   }).join('');
 
@@ -482,6 +539,19 @@ function onTaskSubmit(e) {
   refocus(els.tasksSemana, '.tarea-nueva input');
 }
 
+function freqEditor(h) {
+  var f = freqOf(h), name = esc(h.name);
+  var html = '<div class="freq-row"><label class="freq-label" for="f-' + h.id + '">Frecuencia</label>' +
+    '<select id="f-' + h.id + '" class="field" data-id="' + h.id + '" data-role="freq">' + freqOptions(freqValue(h)) + '</select></div>';
+  if (f.type === 'days') {
+    html += '<div class="dias" role="group" aria-label="Días de ' + name + '">' + WD.map(function (w, i) {
+      var on = f.days.indexOf(i) >= 0;
+      return '<button type="button" class="dia' + (on ? ' on' : '') + '" data-act="day" data-id="' + h.id + '" data-d="' + i + '" aria-pressed="' + on + '">' + w + '</button>';
+    }).join('') + '</div>';
+  }
+  return html;
+}
+
 // Si estás escribiendo un nombre, no se redibuja la lista (perderías lo que
 // tipeás): se redibuja cuando salís del campo.
 var habitosDiferido = false;
@@ -510,14 +580,14 @@ function renderHabitos(force) {
           '<input id="n-' + h.id + '" class="field" type="text" value="' + name + '" maxlength="60" data-id="' + h.id + '" autocomplete="off">' +
           '<div class="edit-actions">' +
           '<label class="sr-only" for="c-' + h.id + '">Categoría</label>' +
-          '<select id="c-' + h.id + '" class="field" data-id="' + h.id + '">' + CATS.map(function (k) {
+          '<select id="c-' + h.id + '" class="field" data-id="' + h.id + '" data-role="cat">' + CATS.map(function (k) {
             return '<option value="' + k.key + '"' + (k.key === h.cat ? ' selected' : '') + '>' + k.label + '</option>';
           }).join('') + '</select>' +
           '<button type="button" class="icon-btn" data-act="up" data-id="' + h.id + '" aria-label="Subir ' + name + '"' + (i === 0 ? ' disabled' : '') + '>' + UP + '</button>' +
           '<button type="button" class="icon-btn" data-act="down" data-id="' + h.id + '" aria-label="Bajar ' + name + '"' + (i === hs.length - 1 ? ' disabled' : '') + '>' + DOWN + '</button>' +
           '<button type="button" class="btn danger' + (armed ? ' armed' : '') + '" data-act="del" data-id="' + h.id + '">' + (armed ? 'Confirmar' : 'Eliminar') + '</button>' +
-          '</div></li>';
-      }).join('') + '</ul></section>';
+          '</div>' + freqEditor(h) + '</li>';
+        }).join('') + '</ul></section>';
   }).join('');
 }
 
@@ -699,6 +769,18 @@ els.habitList.addEventListener('click', function (e) {
   if (act === 'starter') { loadStarter(); return; }
   if (act === 'up') { move(id, -1); return; }
   if (act === 'down') { move(id, 1); return; }
+  if (act === 'day') {
+    var hd = state.habits.find(function (x) { return x.id === id; });
+    if (!hd) return;
+    var fd = freqOf(hd), dn = Number(b.dataset.d);
+    var dset = fd.days.indexOf(dn) >= 0 ? fd.days.filter(function (x) { return x !== dn; }) : fd.days.concat([dn]).sort();
+    if (!dset.length) { say('Elegí al menos un día.', true); return; }
+    hd.freq = { type: 'days', days: dset };
+    persistHabits();
+    renderHabitos(true);
+    refocus(els.habitList, 'button[data-act="day"][data-id="' + id + '"][data-d="' + dn + '"]');
+    return;
+  }
   if (act === 'del') {
     if (state.confirmDel === id) {
       state.habits = state.habits.filter(function (h) { return h.id !== id; });
@@ -736,8 +818,15 @@ els.habitList.addEventListener('change', function (e) {
   if (t.tagName === 'INPUT') {
     var v = t.value.trim().slice(0, 60);
     if (v && v !== h.name) { h.name = v; persistHabits(); }
-  } else if (t.tagName === 'SELECT') {
+  } else if (t.dataset.role === 'cat') {
     if (CATS.some(function (c) { return c.key === t.value; })) { h.cat = t.value; persistHabits(); }
+  } else if (t.dataset.role === 'freq') {
+    var nf = freqFrom(t.value, h.freq);
+    if (nf) h.freq = nf; else delete h.freq;
+    persistHabits();
+    renderHabitos(true);
+    refocus(els.habitList, 'select[data-role="freq"][data-id="' + id + '"]');
+    return;
   }
   renderHabitos(true);
 });
@@ -749,9 +838,13 @@ els.addForm.addEventListener('submit', function (e) {
   e.preventDefault();
   var name = els.newName.value.trim().slice(0, 60);
   if (!name) { els.newName.focus(); return; }
-  state.habits.push({ id: makeId(), name: name, cat: els.newCat.value });
+  var nh = { id: makeId(), name: name, cat: els.newCat.value };
+  var nfq = freqFrom(els.newFreq.value);
+  if (nfq) nh.freq = nfq;
+  state.habits.push(nh);
   persistHabits();
   els.newName.value = '';
+  els.newFreq.value = 'daily';
   renderHabitos(true);
   say('Hábito añadido a ' + CATS.find(function (c) { return c.key === els.newCat.value; }).label + '.');
 });

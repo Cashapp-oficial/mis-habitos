@@ -142,6 +142,39 @@ with sync_playwright() as p:
     ok("añadir un hábito")
     page.screenshot(path=str(SALIDA / "habitos.png"), full_page=True)
 
+    # Frecuencia: Entrenar 3 veces por semana y Caminar de lunes a viernes.
+    page.select_option('select[data-role="freq"] >> nth=0', "w3")
+    page.select_option('select[data-role="freq"] >> nth=1', "days")
+    page.wait_for_selector(".dias")
+    if page.locator(".dia.on").count() != 5:
+        falla("días fijos no arranca de lunes a viernes")
+    page.locator(".dia").nth(5).click()  # suma el sábado
+    if page.locator(".dia.on").count() != 6:
+        falla("no se pudo sumar un día")
+    page.locator(".dia").nth(5).click()
+    ok("elegir frecuencia: 3 por semana y días fijos")
+    page.screenshot(path=str(SALIDA / "habitos-frecuencia.png"), full_page=True)
+    page.click('.tab[data-tab="hoy"]')
+    page.wait_for_selector(".habit")
+    if "de 3 esta semana" not in page.text_content("#hoyList"):
+        falla("Hoy no muestra el avance semanal del hábito de 3 por semana")
+    import datetime
+    dia_semana = datetime.date.fromisoformat(hoy_ba).weekday()  # 0 = lunes
+    apagados = page.locator(".habit.off-day").count()
+    if (dia_semana >= 5) != (apagados == 1):
+        falla(f"el hábito de lunes a viernes no se apaga bien hoy (día {dia_semana}, apagados {apagados})")
+    ok("Hoy muestra 'de 3 esta semana' y apaga el de días fijos cuando no toca")
+    # "Tomar 2 litros de agua" está hecho hoy: marcándolo ayer, la racha es 2 y es su récord.
+    page.click("#prevDay")
+    page.locator('.habit:has-text("Tomar 2 litros") .check').click()
+    page.click("#goToday")
+    fila = page.locator('.habit:has-text("Tomar 2 litros")')
+    if "racha 2 días" not in fila.text_content() or fila.locator(".record.top").count() != 1:
+        falla("con dos días seguidos no muestra 'racha 2 días' y 'tu récord': " + fila.text_content())
+    ok("dos días seguidos: 'racha 2 días' y 'tu récord'")
+    page.screenshot(path=str(SALIDA / "hoy-frecuencia.png"), full_page=True)
+    page.click('.tab[data-tab="habitos"]')
+
     with page.expect_download() as d:
         page.click("#exportBtn")
     arch = SALIDA / "respaldo.json"
