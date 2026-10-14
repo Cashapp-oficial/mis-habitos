@@ -9,7 +9,7 @@ import { CATS, getVal, streak as streakOf, bestStreak, mergeData, makeBackup, pa
   freqOf, freqLabel, isScheduled, countsOn, weekCount, periodScore, pct, cleanHabit } from './datos.js';
 import { createStore, readLocalData } from './store.js';
 import { vapidKey } from './firebase-config.js';
-import { animar, quieto, encadenar, contar, foto, cambiarEnSuLugar, latido, anillo, reacomodar, tachar, reaparecer,
+import { animar, quieto, encadenar, contar, foto, cambiarEnSuLugar, entrarDesde, entintar, subirNumero, sellar, ensenarGesto, anillo, reacomodar, tachar, reaparecer,
   ofrecerDeshacer, rechazar, deslizable, salirDeCostado, crecerHasta, ejemplosQueSeEscriben, luzQueSigue } from './movimiento.js';
 
 var STARTER = [
@@ -296,9 +296,21 @@ function renderHoy() {
   els.miniDia.textContent = els.dayName.textContent;
   els.miniNum.innerHTML = done + '<small>/' + due.length + '</small>';
   els.miniTally.innerHTML = segs;
-  if (recien) anillo(els.summary.querySelector('.big-caja'));
+  if (recien) { anillo(els.summary.querySelector('.big-caja')); sellar(els.summary.querySelector('.big')); }
+  if (!gestoVisto && list.length && state.ready) { gestoVisto = true; ensenarUnaVez(); }
 }
 var ultimoHoy = null;
+
+/* Las tres primeras veces que abrís la app, el primer hábito se corre solo para enseñar que se desliza. */
+var gestoVisto = false;
+function ensenarUnaVez() {
+  var n = 0;
+  try { n = Number(localStorage.getItem('mh:gesto')) || 0; localStorage.setItem('mh:gesto', n + 1); } catch (e) { return; }
+  if (n >= 3) return;
+  setTimeout(function () {
+    if (state.tab === 'hoy') ensenarGesto(els.hoyList.querySelector('.habit'), 'Lo hice', 'hecho');
+  }, 900);
+}
 
 /* Hoy, al bajar: el número grande se achica y, cuando ya casi no se ve, queda
    en la barra de arriba. Va atado al scroll, sin tiempo propio. */
@@ -573,7 +585,7 @@ function toggleTask(ws, id) {
   render();
   var sel = '.tareas[data-week="' + ws + '"] button[data-tact="toggle"][data-tid="' + id + '"]';
   refocus(document, sel);
-  latido(document.querySelector(sel));
+  if (it.done) entintar(document.querySelector(sel));
 }
 
 /* Se borra al primer toque y queda "Deshacer" 5 segundos. */
@@ -826,11 +838,14 @@ function markHabit(id, act) {
   if (state.date > state.today) return;
   var cur = val(state.date, id);
   var next = act === 'done' ? (cur === 1 ? undefined : 1) : (cur === 0 ? undefined : 0);
+  var segs = foto(els.summary, '.seg'), antes = ultimoHoy ? ultimoHoy.done : null;
   setVal(state.date, id, next);
   renderHoy();
   var sel = 'button[data-act="' + act + '"][data-id="' + id + '"]';
   refocus(els.hoyList, sel);
-  latido(els.hoyList.querySelector(sel));
+  if (next === 1) entintar(els.hoyList.querySelector('button.check[data-id="' + id + '"]'));
+  cambiarEnSuLugar(els.summary, '.seg', segs, null, [{ transform: 'scaleX(0)', transformOrigin: 'left' }, { transform: 'none', transformOrigin: 'left' }]);
+  if (ultimoHoy && antes !== ultimoHoy.done) subirNumero(els.summary.querySelector('.big-n'));
 }
 
 /* Deslizar en Hoy: a la derecha "lo hice", a la izquierda "no lo hice". */
@@ -863,12 +878,12 @@ els.weekGrid.addEventListener('click', function (e) {
   renderSemana();
   var sel = 'button.cell[data-id="' + id + '"][data-date="' + date + '"]';
   refocus(els.weekGrid, sel);
-  latido(els.weekGrid.querySelector(sel));
+  if (val(date, id) === 1) entintar(els.weekGrid.querySelector(sel));
 });
 
 /* Al cambiar de día, semana o mes, lo que cambió se reimprime en su lugar y
    los números cuentan, en vez de que la pantalla entera se reemplace. */
-function cambiarDia(fn) {
+function cambiarDia(fn, dir) {
   var antes = { dots: foto(els.hoyList, '.dot'), filas: foto(els.hoyList, '.habit'), segs: foto(els.summary, '.seg'), n: ultimoHoy ? ultimoHoy.done : NaN };
   fn();
   renderHoy();
@@ -876,19 +891,22 @@ function cambiarDia(fn) {
   cambiarEnSuLugar(els.hoyList, '.habit', antes.filas, '.check');
   cambiarEnSuLugar(els.summary, '.seg', antes.segs);
   if (ultimoHoy) contar(els.summary.querySelector('.big-n'), antes.n, ultimoHoy.done);
+  if (dir) entrarDesde(dir, [els.summary, els.hoyList]);
 }
-function cambiarSemana(fn) {
+function cambiarSemana(fn, dir) {
   var antes = foto(els.weekGrid, '.cell');
   fn();
   renderSemana();
   cambiarEnSuLugar(els.weekGrid, '.cell', antes);
+  entrarDesde(dir, [els.weekGrid]);
 }
-function cambiarMes(fn) {
+function cambiarMes(fn, dir) {
   var antes = { dias: foto(els.monthBody, '.cal-dia'), tiras: foto(els.monthBody, '.tira i') };
   fn();
   renderMes();
   cambiarEnSuLugar(els.monthBody, '.cal-dia', antes.dias);
   cambiarEnSuLugar(els.monthBody, '.tira i', antes.tiras);
+  if (dir) entrarDesde(dir, [els.monthBody.querySelector('.cal-tarjeta')]);
 }
 
 els.habitList.addEventListener('click', function (e) {
@@ -978,31 +996,31 @@ els.addForm.addEventListener('submit', function (e) {
 });
 
 els.prevDay.addEventListener('click', function () {
-  cambiarDia(function () { state.date = addDays(state.date, -1); state.followToday = false; });
+  cambiarDia(function () { state.date = addDays(state.date, -1); state.followToday = false; }, -1);
 });
 els.nextDay.addEventListener('click', function () {
   if (state.date >= state.today) return;
-  cambiarDia(function () { state.date = addDays(state.date, 1); state.followToday = state.date === state.today; });
+  cambiarDia(function () { state.date = addDays(state.date, 1); state.followToday = state.date === state.today; }, 1);
 });
 els.goToday.addEventListener('click', function () {
-  cambiarDia(function () { state.date = state.today; state.followToday = true; });
+  cambiarDia(function () { state.date = state.today; state.followToday = true; }, 1);
 });
 els.prevWeek.addEventListener('click', function () {
-  cambiarSemana(function () { state.weekStart = addDays(state.weekStart, -7); });
+  cambiarSemana(function () { state.weekStart = addDays(state.weekStart, -7); }, -1);
 });
 els.nextWeek.addEventListener('click', function () {
   if (state.weekStart > weekStartOf(state.today)) return;
-  cambiarSemana(function () { state.weekStart = addDays(state.weekStart, 7); });
+  cambiarSemana(function () { state.weekStart = addDays(state.weekStart, 7); }, 1);
 });
 els.prevMonth.addEventListener('click', function () {
-  cambiarMes(function () { state.month = addMonths(state.month, -1); state.followMonth = false; });
+  cambiarMes(function () { state.month = addMonths(state.month, -1); state.followMonth = false; }, -1);
 });
 els.nextMonth.addEventListener('click', function () {
   if (state.month >= state.today.slice(0, 7)) return;
-  cambiarMes(function () { state.month = addMonths(state.month, 1); state.followMonth = state.month === state.today.slice(0, 7); });
+  cambiarMes(function () { state.month = addMonths(state.month, 1); state.followMonth = state.month === state.today.slice(0, 7); }, 1);
 });
 els.goThisMonth.addEventListener('click', function () {
-  cambiarMes(function () { state.month = state.today.slice(0, 7); state.followMonth = true; });
+  cambiarMes(function () { state.month = state.today.slice(0, 7); state.followMonth = true; }, 1);
 });
 /* Transformar: el día que tocás crece hasta ser la pantalla de Hoy. */
 els.monthBody.addEventListener('click', function (e) {

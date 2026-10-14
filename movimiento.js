@@ -40,8 +40,8 @@ export function encadenar(vista) {
     } else piezas.push(n);
   });
   piezas.slice(0, 9).forEach(function (p, i) {
-    animar(p, [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }], 320,
-      { delay: i * 60 * S, fill: 'backwards' });
+    animar(p, [{ opacity: 0, transform: 'translateY(22px) scale(0.98)' }, { opacity: 1, transform: 'none' }], 440,
+      { delay: i * 80 * S, fill: 'backwards' });
   });
 }
 
@@ -66,14 +66,63 @@ export function contar(el, de, a, fmt) {
 export function foto(raiz, sel) {
   return Array.prototype.map.call(raiz.querySelectorAll(sel), function (n) { return n.className; });
 }
-export function cambiarEnSuLugar(raiz, sel, antes, cual) {
+export function cambiarEnSuLugar(raiz, sel, antes, cual, frames) {
   if (quieto() || !antes) return;
   var j = 0;
   raiz.querySelectorAll(sel).forEach(function (n, i) {
     if (antes[i] === undefined || antes[i] === n.className) return;
     var blanco = cual ? n.querySelector(cual) : n;
-    animar(blanco, [{ opacity: 0.25, transform: 'scale(0.6)' }, { opacity: 1, transform: 'none' }], 300,
-      { delay: Math.min(j++, 24) * 12 * S, fill: 'backwards' });
+    animar(blanco, frames || [{ opacity: 0, transform: 'scale(0.3)' }, { opacity: 1, transform: 'none' }], 340,
+      { delay: Math.min(j++, 24) * 14 * S, fill: 'backwards' });
+  });
+}
+
+/* Ir al día, la semana o el mes anterior entra desde la izquierda; al siguiente, desde la derecha. */
+export function entrarDesde(dir, piezas) {
+  piezas.forEach(function (el) {
+    animar(el, [{ opacity: 0.2, transform: 'translateX(' + (dir * 28) + 'px)' }, { opacity: 1, transform: 'none' }], 340, { fill: 'none' });
+  });
+}
+
+/* Marcar "lo hice": el círculo se llena de tinta desde el centro y el tilde se dibuja. */
+export function entintar(check) {
+  if (quieto() || !check) return;
+  var c = getComputedStyle(check).backgroundColor;
+  animar(check, [{ backgroundColor: 'transparent', boxShadow: 'inset 0 0 0 0 ' + c }, { backgroundColor: 'transparent', boxShadow: 'inset 0 0 0 24px ' + c }], 260, { fill: 'none' });
+  var trazo = check.querySelector('path');
+  if (trazo) animar(trazo, [{ strokeDasharray: 24, strokeDashoffset: 24 }, { strokeDasharray: 24, strokeDashoffset: 0 }], 240, { delay: 150 * S, fill: 'backwards' });
+}
+
+/* El número que cambia: el viejo se va hacia arriba y el nuevo sube desde abajo. */
+export function subirNumero(el) {
+  animar(el, [{ opacity: 0, transform: 'translateY(14px)' }, { opacity: 1, transform: 'none' }], 300, { fill: 'none' });
+}
+
+/* El día completo: el número cae como un sello (el único rebote permitido). */
+export function sellar(el) {
+  animar(el, [{ transform: 'scale(1.35) rotate(-6deg)', opacity: 0.4 }, { transform: 'scale(0.96) rotate(1deg)', opacity: 1, offset: 0.7 }, { transform: 'none', opacity: 1 }], 420, { fill: 'none' });
+}
+
+/* La primera vez, el primer renglón se corre solo un poco para enseñar que se puede deslizar. */
+export function ensenarGesto(fila, texto, clase) {
+  if (quieto() || !fila) return;
+  var tira = document.createElement('span');
+  tira.setAttribute('aria-hidden', 'true');
+  tira.className = 'desliza-tira der ' + clase;
+  tira.textContent = texto;
+  fila.classList.add('deslizando');
+  fila.appendChild(tira);
+  var t0 = performance.now(), d = 1300 * S;
+  requestAnimationFrame(function paso(t) {
+    if (!fila.isConnected) return;
+    var p = Math.min(1, (t - t0) / d);
+    var k = p < 0.35 ? 1 - Math.pow(1 - p / 0.35, 3) : p < 0.6 ? 1 : Math.pow(1 - (p - 0.6) / 0.4, 3);
+    fila.style.setProperty('--dx', (88 * k) + 'px');
+    tira.style.width = (88 * k) + 'px';
+    if (p < 1) { requestAnimationFrame(paso); return; }
+    fila.classList.remove('deslizando');
+    fila.style.removeProperty('--dx');
+    tira.remove();
   });
 }
 
@@ -89,8 +138,8 @@ export function anillo(sobre) {
   a.className = 'anillo-dia';
   a.setAttribute('aria-hidden', 'true');
   sobre.appendChild(a);
-  alTerminar(animar(a, [{ opacity: 0.9, transform: 'translate(-50%, -50%) scale(0.7)' },
-    { opacity: 0, transform: 'translate(-50%, -50%) scale(1.5)' }], 480), 480, function () { a.remove(); });
+  alTerminar(animar(a, [{ opacity: 1, transform: 'translate(-50%, -50%) scale(0.5)' },
+    { opacity: 0, transform: 'translate(-50%, -50%) scale(1.9)' }], 700), 700, function () { a.remove(); });
 }
 
 /* ---------- Reacomodar: lo que cambia de lugar se desliza hasta el nuevo ---------- */
