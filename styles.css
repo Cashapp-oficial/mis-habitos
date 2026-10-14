@@ -421,9 +421,8 @@ table.week { width: 100%; border-collapse: collapse; table-layout: fixed; }
   cursor: pointer;
 }
 .tarea-borrar svg { width: 16px; height: 16px; }
-.tarea-borrar.armed { background: var(--rojo); color: var(--sobre-color); }
 @media (hover: hover) {
-  .tarea-borrar:not(.armed):hover { background: var(--capa-2); color: var(--texto); }
+  .tarea-borrar:hover { background: var(--capa-2); color: var(--texto); }
 }
 .tareas-vacio { padding: 2px 4px 8px; color: var(--apagado); font-size: 14px; }
 .tarea-nueva { display: flex; gap: 8px; margin-top: 8px; }
@@ -529,7 +528,6 @@ select.field option { background: #1b1b1d; color: var(--texto); }
 }
 .btn.primary, .btn-verde { background: var(--verde); border-color: var(--verde); color: var(--sobre-color); box-shadow: none; }
 .btn.danger { color: var(--rojo); }
-.btn.danger.armed { background: var(--rojo); border-color: var(--rojo); color: var(--sobre-color); }
 @media (hover: hover) {
   .btn:hover { border-color: rgba(255, 255, 255, 0.3); }
   .btn.primary:hover, .btn-verde:hover { filter: brightness(1.08); }
@@ -708,4 +706,179 @@ select.field option { background: #1b1b1d; color: var(--texto); }
 .field.hora { width: 120px; flex: none; font-family: var(--font-data); text-align: center; color-scheme: dark; }
 @media (prefers-reduced-motion: reduce) {
   .interruptor-pista, .interruptor-pista::after { transition: none; }
+}
+
+/* ---------- Movimiento (movimiento.js, 14/10/2026) ----------
+   Las técnicas elegidas para Porkie: deslizar un renglón, borrar con
+   Deshacer, el campo que dice que no, el número que se achica al bajar, el
+   día completo, transformar y la luz que sigue al mouse. */
+
+/* Deslizar: el contenido sigue al dedo y por detrás asoma la acción. */
+.habit, .tarea { position: relative; touch-action: pan-y; }
+.deslizando { overflow: hidden; user-select: none; -webkit-user-select: none; }
+.deslizando > :not(.desliza-tira) { transform: translateX(var(--dx, 0)); }
+.desliza-tira {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 0 16px;
+  font: 500 11px var(--font-data);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--apagado);
+  background: var(--capa-2);
+  pointer-events: none;
+}
+.desliza-tira.der { left: 0; justify-content: flex-start; }
+.desliza-tira.izq { right: 0; justify-content: flex-end; }
+.desliza-tira.hecho { color: var(--c, var(--verde)); background: color-mix(in srgb, var(--c, var(--verde)) 14%, transparent); }
+.desliza-tira.no { color: var(--tenue); background: var(--capa-3); }
+.desliza-tira.borrar { color: var(--rojo); background: rgba(255, 122, 107, 0.14); }
+/* El rótulo se agranda cuando, al soltar, la acción pasa. */
+.desliza-tira { transition: font-size calc(0.16s * var(--s, 1)) cubic-bezier(0.2, 0, 0, 1); }
+.desliza-tira.listo { font-size: 13px; font-weight: 600; }
+
+/* Borrar: la línea de tinta tacha el renglón antes de cerrarlo. */
+.tachando { overflow: hidden; }
+.tachado {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--rojo);
+  transform-origin: left;
+  pointer-events: none;
+}
+.edit-row { position: relative; }
+.edit-row .tachado { top: 32px; }
+
+/* Deshacer, con la línea que se consume en 5 segundos. */
+.deshacer {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
+  z-index: 41;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: min(92vw, 400px);
+  padding: 6px 6px 8px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--linea-fuerte);
+  background: #1e1e20;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+}
+.deshacer-texto { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deshacer-btn {
+  flex: none;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--verde);
+  font-weight: 700;
+  cursor: pointer;
+}
+.deshacer-linea { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--verde); transform-origin: left; }
+
+/* El campo que dice que no. */
+.field.mal { border-color: var(--rojo); box-shadow: 0 0 0 3px rgba(255, 122, 107, 0.14); }
+.ayuda-mal { flex: 1 1 100%; color: var(--rojo); font-size: 13px; padding: 0 4px; }
+
+/* El número del día se achica al bajar y queda en una barra arriba. */
+.big { display: inline-block; transform-origin: 50% 0; will-change: transform; }
+.mini-hoy {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 29;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 0;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+.mini-hoy-caja {
+  max-width: 448px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 9px 16px 10px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02) 60%), rgba(17, 17, 18, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 12px 30px rgba(0, 0, 0, 0.35);
+  -webkit-backdrop-filter: blur(22px) saturate(1.8);
+  backdrop-filter: blur(22px) saturate(1.8);
+}
+.mini-hoy-dia { font: 500 11px var(--font-data); letter-spacing: 0.14em; text-transform: uppercase; color: var(--tenue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-hoy-num { font: 400 24px/1 var(--font-display); color: var(--verde); font-variant-numeric: tabular-nums; }
+.mini-hoy-num small { font-size: 15px; color: rgba(255, 255, 255, 0.45); }
+.mini-hoy .tally { grid-column: 1 / -1; gap: 2px; }
+.mini-hoy .seg { height: 4px; border-radius: 2px; }
+
+/* El día completo: el anillo que se abre una vez. */
+.sum-hero .big-caja { position: relative; display: inline-block; }
+.anillo-dia {
+  position: absolute;
+  left: 50%;
+  top: 55%;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  border: 2px solid var(--verde);
+  pointer-events: none;
+}
+.count.completa { color: var(--c); }
+
+/* Transformar: la celda del calendario que crece hasta ser Hoy. */
+.crece { position: fixed; z-index: 50; pointer-events: none; }
+
+/* La luz que sigue al mouse, por debajo del contenido de la tarjeta. */
+@media (hover: hover) and (pointer: fine) {
+  .vidrio { isolation: isolate; }
+  .vidrio::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s;
+    background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgba(143, 255, 31, 0.07), transparent 70%);
+  }
+  .vidrio::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s;
+    background: radial-gradient(160px circle at var(--mx, 50%) var(--my, 50%), rgba(143, 255, 31, 0.55), transparent 70%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+  .vidrio.luz::after, .vidrio.luz::before { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desliza-tira, .vidrio::after, .vidrio::before { transition: none; }
 }

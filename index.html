@@ -56,9 +56,9 @@
       </div>
     </div>
     <button type="button" id="goToday" class="chip" hidden>Volver a hoy</button>
-    <div class="summary" id="summary"></div>
+    <div class="summary" id="summary" data-cadena></div>
     <div id="tasksHoy"></div>
-    <div id="hoyList"></div>
+    <div id="hoyList" data-cadena></div>
   </section>
 
   <section id="viewSemana" class="view" hidden>
@@ -90,7 +90,7 @@
       </div>
     </div>
     <button type="button" id="goThisMonth" class="chip" hidden>Volver a este mes</button>
-    <div id="monthBody"></div>
+    <div id="monthBody" data-cadena></div>
   </section>
 
   <section id="viewHabitos" class="view" hidden>
@@ -123,7 +123,7 @@
       </select>
       <button type="submit" class="btn primary">Añadir</button>
     </form>
-    <div id="habitList"></div>
+    <div id="habitList" data-cadena></div>
 
     <svg class="guarda" data-guarda viewBox="0 0 354 12" preserveAspectRatio="none" aria-hidden="true"></svg>
 
@@ -179,6 +179,9 @@
 </dialog>
 
 <p id="status" class="status" role="status" hidden></p>
+
+<!-- Hoy, al bajar: el número del día se achica y queda acá arriba. -->
+<div class="mini-hoy" id="miniHoy" aria-hidden="true"><div class="mini-hoy-caja"><span class="mini-hoy-dia" id="miniDia"></span><span class="mini-hoy-num" id="miniNum"></span><div class="tally" id="miniTally"></div></div></div>
 
 <nav class="tabbar" id="tabbar" aria-label="Secciones">
   <button type="button" class="tab" data-tab="hoy" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg><span>Hoy</span></button>

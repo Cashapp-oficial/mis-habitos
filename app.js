@@ -9,6 +9,8 @@ import { CATS, getVal, streak as streakOf, bestStreak, mergeData, makeBackup, pa
   freqOf, freqLabel, isScheduled, countsOn, weekCount, periodScore, pct, cleanHabit } from './datos.js';
 import { createStore, readLocalData } from './store.js';
 import { vapidKey } from './firebase-config.js';
+import { animar, quieto, encadenar, contar, foto, cambiarEnSuLugar, latido, anillo, reacomodar, tachar, reaparecer,
+  ofrecerDeshacer, rechazar, deslizable, salirDeCostado, crecerHasta, ejemplosQueSeEscriben, luzQueSigue } from './movimiento.js';
 
 var STARTER = [
   ['ejercicio', 'Entrenar 40 minutos'],
@@ -44,7 +46,7 @@ var els = {
   exportBtn: $('exportBtn'), importBtn: $('importBtn'), importFile: $('importFile'),
   dialog: $('dialog'), dialogEyebrow: $('dialogEyebrow'), dialogTitle: $('dialogTitle'), dialogText: $('dialogText'),
   dialogOk: $('dialogOk'), dialogCancel: $('dialogCancel'),
-  status: $('status')
+  status: $('status'), miniHoy: $('miniHoy'), miniDia: $('miniDia'), miniNum: $('miniNum'), miniTally: $('miniTally')
 };
 
 /* ---------- adornos de grabado (los mismos de Porkie) ---------- */
@@ -88,6 +90,12 @@ function esc(s) {
   });
 }
 function clone(x) { return JSON.parse(JSON.stringify(x)); }
+/* JSON con las claves ordenadas: dos copias iguales dan el mismo texto aunque las haya armado otro. */
+function stable(x) {
+  if (Array.isArray(x)) return '[' + x.map(stable).join(',') + ']';
+  if (x && typeof x === 'object') return '{' + Object.keys(x).sort().map(function (k) { return JSON.stringify(k) + ':' + stable(x[k]); }).join(',') + '}';
+  return JSON.stringify(x);
+}
 function makeId() { return 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 function refocus(root, sel) {
   var n = root.querySelector(sel);
@@ -98,7 +106,7 @@ function refocus(root, sel) {
 
 var state = {
   tab: 'hoy', today: todayStr(), date: todayStr(), followToday: true, weekStart: weekStartOf(todayStr()), month: todayStr().slice(0, 7), followMonth: true,
-  habits: [], logs: {}, tasks: {}, ready: false, confirmDel: null, confirmTask: null,
+  habits: [], logs: {}, tasks: {}, ready: false,
   user: null, pending: false, online: navigator.onLine, dataKey: ''
 };
 var store = null;
@@ -166,7 +174,9 @@ var statusTimer;
 function say(msg, isErr) {
   els.status.textContent = msg;
   els.status.classList.toggle('err', !!isErr);
+  var estaba = !els.status.hidden;
   els.status.hidden = false;
+  if (!estaba) animar(els.status, [{ opacity: 0, transform: 'translate(-50%, 10px)' }, { opacity: 1, transform: 'translate(-50%, 0)' }], 220, { fill: 'none' });
   clearTimeout(statusTimer);
   statusTimer = setTimeout(function () { els.status.hidden = true; }, isErr ? 6000 : 2600);
 }
@@ -261,9 +271,13 @@ function renderHoy() {
   });
   var label = !due.length ? (d === t ? 'hoy no te toca ningún hábito' : 'ese día no tocaba ningún hábito') :
     'hechos ' + (d === t ? 'hoy' : 'ese día') + (miss ? ' · ' + miss + ' no hecho' + (miss > 1 ? 's' : '') : '');
+  // El día que se completa recién (no al abrir): el anillo se abre una vez.
+  var completo = due.length > 0 && done === due.length;
+  var recien = completo && ultimoHoy && ultimoHoy.date === d && ultimoHoy.done < due.length;
+  ultimoHoy = { date: d, done: done, due: due.length };
   els.summary.innerHTML =
     '<div class="sum-hero"><svg class="roseta" viewBox="0 0 300 300" aria-hidden="true">' + ROSETA + '</svg>' +
-    '<span class="big">' + done + '<span class="of">/' + due.length + '</span></span>' +
+    '<span class="big-caja"><span class="big"><span class="big-n">' + done + '</span><span class="of">/' + due.length + '</span></span></span>' +
     '<span class="sum-sub">' + label + '</span>' +
     '<span class="micro" aria-hidden="true">' + MICRO + '</span></div>' +
     (due.length ? '<div class="tally" role="img" aria-label="' + done + ' de ' + due.length + ' hábitos hechos">' + segs + '</div>' : '') +
@@ -275,10 +289,41 @@ function renderHoy() {
     var n = hs.filter(function (h) { return val(d, h.id) === 1; }).length;
     var nd = hs.filter(function (h) { return counts(h, d); }).length;
     return '<section class="cat vidrio cat-' + c.key + '" aria-labelledby="cat-' + c.key + '">' +
-      '<header class="cat-head"><h2 id="cat-' + c.key + '">' + c.label + '</h2><span class="count">' + n + '/' + nd + '</span></header>' +
+      '<header class="cat-head"><h2 id="cat-' + c.key + '">' + c.label + '</h2><span class="count' + (nd && n >= nd ? ' completa' : '') + '">' + n + '/' + nd + '</span></header>' +
       '<ul class="habits">' + hs.map(function (h) { return habitRow(h, d); }).join('') + '</ul></section>';
   }).join('');
+
+  els.miniDia.textContent = els.dayName.textContent;
+  els.miniNum.innerHTML = done + '<small>/' + due.length + '</small>';
+  els.miniTally.innerHTML = segs;
+  if (recien) anillo(els.summary.querySelector('.big-caja'));
 }
+var ultimoHoy = null;
+
+/* Hoy, al bajar: el número grande se achica y, cuando ya casi no se ve, queda
+   en la barra de arriba. Va atado al scroll, sin tiempo propio. */
+var scrollPendiente = false;
+function alBajar() {
+  scrollPendiente = false;
+  var hero = state.tab === 'hoy' && els.summary.querySelector('.sum-hero');
+  var big = hero && hero.querySelector('.big');
+  var p = 0;
+  if (hero) {
+    var r = hero.getBoundingClientRect();
+    p = Math.min(1, Math.max(0, (24 - r.top) / Math.max(1, r.height - 30)));
+  }
+  if (big) {
+    if (quieto()) big.style.transform = '';
+    else { big.style.transform = p ? 'scale(' + (1 - 0.45 * p) + ')' : ''; big.style.opacity = p ? 1 - 0.7 * p : ''; }
+  }
+  var m = quieto() ? (p > 0.6 ? 1 : 0) : Math.min(1, Math.max(0, (p - 0.55) / 0.35));
+  els.miniHoy.style.opacity = m;
+  els.miniHoy.style.visibility = m ? 'visible' : 'hidden';
+  els.miniHoy.style.transform = m && m < 1 ? 'translateY(' + (-8 * (1 - m)) + 'px)' : '';
+}
+window.addEventListener('scroll', function () {
+  if (!scrollPendiente) { scrollPendiente = true; requestAnimationFrame(alBajar); }
+}, { passive: true });
 
 function renderSemana() {
   var t = state.today, ws = state.weekStart;
@@ -382,9 +427,9 @@ function renderMes() {
   var cmp = past ? compareText(pctAll, before, fmtMonthName.format(parse(prevMk + '-01'))) : '';
 
   var summary = '<div class="mes-resumen">' +
-    '<div><span class="mes-num">' + pctAll + '<small>%</small></span><span class="rotulo">cumplido</span></div>' +
-    '<div><span class="mes-num">' + doneAll + '</span><span class="rotulo">hechos</span></div>' +
-    '<div><span class="mes-num">' + full + '</span><span class="rotulo">días completos</span></div>' +
+    '<div><span class="mes-num"><span class="mes-n">' + pctAll + '</span><small>%</small></span><span class="rotulo">cumplido</span></div>' +
+    '<div><span class="mes-num"><span class="mes-n">' + doneAll + '</span></span><span class="rotulo">hechos</span></div>' +
+    '<div><span class="mes-num"><span class="mes-n">' + full + '</span></span><span class="rotulo">días completos</span></div>' +
     '</div>' +
     (cmp ? '<p class="comparacion ' + (pctAll > before ? 'sube' : pctAll < before ? 'baja' : '') + '">' + cmp + '</p>' : '') +
     '<p class="hint">' + (past === total ? 'Los ' + total + ' días del mes.' : 'Del 1 al ' + past + ' de ' + total + ' días. Se completa a medida que pasa el mes.') + '</p>';
@@ -431,7 +476,15 @@ function renderMes() {
     '<div class="vidrio cal-tarjeta">' + cal + legend + '</div>' +
     '<p class="hint">Tocá un día para verlo y marcarlo en Hoy.</p>' +
     '<div class="mes-cats">' + cats + '</div>';
+
+  // Al pasar a otro mes, los tres números cuentan desde los del mes anterior.
+  var nums = [pctAll, doneAll, full];
+  if (ultimoMes && ultimoMes.mk !== mk) {
+    els.monthBody.querySelectorAll('.mes-n').forEach(function (el, i) { contar(el, ultimoMes.nums[i], nums[i]); });
+  }
+  ultimoMes = { mk: mk, nums: nums };
 }
+var ultimoMes = null;
 
 /* ---------- pendientes de la semana ---------- */
 
@@ -457,11 +510,11 @@ function tasksHtml(ws, compact) {
 
   if (items.length) {
     html += '<ul class="tareas-lista">' + items.map(function (x) {
-      var txt = esc(x.text), armed = state.confirmTask === x.id;
-      return '<li class="tarea' + (x.done ? ' hecha' : '') + '">' +
+      var txt = esc(x.text);
+      return '<li class="tarea' + (x.done ? ' hecha' : '') + '" data-tid="' + x.id + '">' +
         '<button type="button" class="tarea-check" data-tact="toggle" data-tid="' + x.id + '" aria-pressed="' + x.done + '" aria-label="' + txt + ': hecho">' + CHECK_CHICO + '</button>' +
         '<p class="tarea-texto">' + txt + '</p>' +
-        (compact ? '' : '<button type="button" class="tarea-borrar' + (armed ? ' armed' : '') + '" data-tact="del" data-tid="' + x.id + '" aria-label="' + (armed ? 'Confirmar: borrar ' : 'Borrar ') + txt + '">' + (armed ? 'Borrar' : XMARK) + '</button>') +
+        (compact ? '' : '<button type="button" class="tarea-borrar" data-tact="del" data-tid="' + x.id + '" aria-label="Borrar ' + txt + '">' + XMARK + '</button>') +
         '</li>';
     }).join('') + '</ul>';
   } else if (!compact) {
@@ -498,46 +551,63 @@ function onTaskClick(e) {
     var prev = addDays(ws, -7);
     var old = tasksOf(prev);
     var left = old.filter(function (x) { return !x.done; });
-    saveTasks(prev, old.filter(function (x) { return x.done; }));
-    saveTasks(ws, items.concat(left.map(function (x) { return { id: x.id, text: x.text, done: false }; })));
-    render();
+    reacomodar(box.parentNode, '.tarea', tareaClave, function () {
+      saveTasks(prev, old.filter(function (x) { return x.done; }));
+      saveTasks(ws, items.concat(left.map(function (x) { return { id: x.id, text: x.text, done: false }; })));
+      render();
+    });
     say(left.length === 1 ? 'Pendiente pasado a esta semana.' : left.length + ' pendientes pasados a esta semana.');
     return;
   }
+  if (act === 'toggle') toggleTask(ws, id);
+  else if (act === 'del') deleteTask(ws, id, b.closest('.tarea'), false);
+}
+function tareaClave(n) { return n.dataset.tid; }
+
+function toggleTask(ws, id) {
+  var items = tasksOf(ws).map(function (x) { return { id: x.id, text: x.text, done: x.done }; });
   var it = items.find(function (x) { return x.id === id; });
   if (!it) return;
-  if (act === 'toggle') {
-    it.done = !it.done;
-    saveTasks(ws, items);
-    render();
-    refocus(document, '.tareas[data-week="' + ws + '"] button[data-tact="toggle"][data-tid="' + id + '"]');
-  } else if (act === 'del') {
-    if (state.confirmTask === id) {
-      state.confirmTask = null;
-      saveTasks(ws, items.filter(function (x) { return x.id !== id; }));
-      render();
-      say('Pendiente borrado.');
-    } else {
-      state.confirmTask = id;
-      render();
-      refocus(document, '.tareas[data-week="' + ws + '"] button[data-tact="del"][data-tid="' + id + '"]');
-      clearTimeout(confirmTaskTimer);
-      confirmTaskTimer = setTimeout(function () { if (state.confirmTask) { state.confirmTask = null; render(); } }, 4000);
-    }
-  }
+  it.done = !it.done;
+  saveTasks(ws, items);
+  render();
+  var sel = '.tareas[data-week="' + ws + '"] button[data-tact="toggle"][data-tid="' + id + '"]';
+  refocus(document, sel);
+  latido(document.querySelector(sel));
 }
-var confirmTaskTimer;
+
+/* Se borra al primer toque y queda "Deshacer" 5 segundos. */
+function deleteTask(ws, id, fila, yaSalio) {
+  var before = tasksOf(ws).slice();
+  var i = before.findIndex(function (x) { return x.id === id; });
+  if (i < 0) return;
+  var it = before[i];
+  (yaSalio ? salirDeCostado : tachar)(fila, function () {
+    saveTasks(ws, before.filter(function (x) { return x.id !== id; }));
+    render();
+    ofrecerDeshacer('Borraste «' + it.text + '»', function () {
+      var now = tasksOf(ws).slice();
+      if (now.some(function (x) { return x.id === id; })) return;
+      now.splice(Math.min(i, now.length), 0, it);
+      saveTasks(ws, now);
+      render();
+      reaparecer(document.querySelector('.tareas[data-week="' + ws + '"] .tarea[data-tid="' + id + '"]'));
+    });
+  });
+}
 
 function onTaskSubmit(e) {
   var form = e.target.closest('.tarea-nueva');
   if (!form) return;
   e.preventDefault();
   var input = form.querySelector('input'), text = input.value.trim().slice(0, 140);
-  if (!text) { input.focus(); return; }
+  if (!text) { rechazar(input, 'Escribí qué tenés que hacer, por ejemplo: Llamar al dentista.'); return; }
   var ws = form.closest('.tareas').dataset.week;
   if (tasksOf(ws).length >= 100) { say('Esta semana ya tiene 100 pendientes.', true); return; }
-  saveTasks(ws, tasksOf(ws).concat([{ id: makeId(), text: text, done: false }]));
-  render();
+  reacomodar(els.tasksSemana, '.tarea', tareaClave, function () {
+    saveTasks(ws, tasksOf(ws).concat([{ id: makeId(), text: text, done: false }]));
+    render();
+  });
   refocus(els.tasksSemana, '.tarea-nueva input');
 }
 
@@ -576,8 +646,8 @@ function renderHabitos(force) {
     if (!hs.length) return '';
     return '<section class="cat vidrio cat-' + c.key + '"><header class="cat-head"><h2>' + c.label + '</h2><span class="count">' + hs.length + '</span></header>' +
       '<ul class="habits">' + hs.map(function (h, i) {
-        var name = esc(h.name), armed = state.confirmDel === h.id;
-        return '<li class="edit-row">' +
+        var name = esc(h.name);
+        return '<li class="edit-row" data-hid="' + h.id + '">' +
           '<label class="sr-only" for="n-' + h.id + '">Nombre del hábito</label>' +
           '<input id="n-' + h.id + '" class="field" type="text" value="' + name + '" maxlength="60" data-id="' + h.id + '" autocomplete="off">' +
           '<div class="edit-actions">' +
@@ -587,7 +657,7 @@ function renderHabitos(force) {
           }).join('') + '</select>' +
           '<button type="button" class="icon-btn" data-act="up" data-id="' + h.id + '" aria-label="Subir ' + name + '"' + (i === 0 ? ' disabled' : '') + '>' + UP + '</button>' +
           '<button type="button" class="icon-btn" data-act="down" data-id="' + h.id + '" aria-label="Bajar ' + name + '"' + (i === hs.length - 1 ? ' disabled' : '') + '>' + DOWN + '</button>' +
-          '<button type="button" class="btn danger' + (armed ? ' armed' : '') + '" data-act="del" data-id="' + h.id + '">' + (armed ? 'Confirmar' : 'Eliminar') + '</button>' +
+          '<button type="button" class="btn danger" data-act="del" data-id="' + h.id + '" aria-label="Eliminar ' + name + '">Eliminar</button>' +
           '</div>' + freqEditor(h) + '</li>';
         }).join('') + '</ul></section>';
   }).join('');
@@ -630,6 +700,11 @@ function setTab(t) {
   });
   render();
   window.scrollTo(0, 0);
+  alBajar();
+  if (state.ready) encadenar(currentView());
+}
+function currentView() {
+  return { hoy: els.viewHoy, semana: els.viewSemana, mes: els.viewMes, habitos: els.viewHabitos }[state.tab];
 }
 
 function showLogin(on) {
@@ -658,7 +733,7 @@ function move(id, dir) {
   if (j < 0 || j >= state.habits.length) return;
   var tmp = state.habits[i]; state.habits[i] = state.habits[j]; state.habits[j] = tmp;
   persistHabits();
-  renderHabitos(true);
+  reacomodar(els.habitList, '.edit-row', habitoClave, function () { renderHabitos(true); });
   refocus(els.habitList, 'button[data-act="' + (dir < 0 ? 'up' : 'down') + '"][data-id="' + id + '"]:not(:disabled)');
 }
 
@@ -739,21 +814,45 @@ async function importBackup(file) {
 
 /* ---------- eventos ---------- */
 
-var confirmTimer;
 els.hoyList.addEventListener('click', function (e) {
   var b = e.target.closest('button[data-act]');
   if (!b) return;
   var act = b.dataset.act;
   if (act === 'starter') { loadStarter(); return; }
   if (act === 'goHabitos') { setTab('habitos'); return; }
-  var id = b.dataset.id;
-  if (!id || state.date > state.today) return;
+  if (b.dataset.id) markHabit(b.dataset.id, act);
+});
+function markHabit(id, act) {
+  if (state.date > state.today) return;
   var cur = val(state.date, id);
   var next = act === 'done' ? (cur === 1 ? undefined : 1) : (cur === 0 ? undefined : 0);
   setVal(state.date, id, next);
   renderHoy();
-  refocus(els.hoyList, 'button[data-act="' + act + '"][data-id="' + id + '"]');
+  var sel = 'button[data-act="' + act + '"][data-id="' + id + '"]';
+  refocus(els.hoyList, sel);
+  latido(els.hoyList.querySelector(sel));
+}
+
+/* Deslizar en Hoy: a la derecha "lo hice", a la izquierda "no lo hice". */
+deslizable(els.hoyList, '.habit', function (fila) {
+  var id = fila.querySelector('.check').dataset.id, v = val(state.date, id);
+  return {
+    der: { texto: v === 1 ? 'Desmarcar' : 'Lo hice', clase: v === 1 ? 'no' : 'hecho', hacer: function () { markHabit(id, 'done'); } },
+    izq: { texto: v === 0 ? 'Desmarcar' : 'No lo hice', clase: 'no', hacer: function () { markHabit(id, 'miss'); } }
+  };
 });
+/* Pendientes: a la derecha se tildan; en Semana, a la izquierda se borran. */
+function tareaDeslizable(raiz, conBorrar) {
+  deslizable(raiz, '.tarea', function (fila) {
+    var ws = fila.closest('.tareas').dataset.week, id = fila.dataset.tid, hecha = fila.classList.contains('hecha');
+    return {
+      der: { texto: hecha ? 'Sin hacer' : 'Hecho', clase: hecha ? 'no' : 'hecho', hacer: function () { toggleTask(ws, id); } },
+      izq: conBorrar ? { texto: 'Borrar', clase: 'borrar', sigue: true, hacer: function (f) { deleteTask(ws, id, f, true); } } : null
+    };
+  });
+}
+tareaDeslizable(els.tasksHoy, false);
+tareaDeslizable(els.tasksSemana, true);
 
 els.weekGrid.addEventListener('click', function (e) {
   var b = e.target.closest('button.cell');
@@ -762,8 +861,35 @@ els.weekGrid.addEventListener('click', function (e) {
   var cur = val(date, id);
   setVal(date, id, cur === undefined ? 1 : cur === 1 ? 0 : undefined);
   renderSemana();
-  refocus(els.weekGrid, 'button.cell[data-id="' + id + '"][data-date="' + date + '"]');
+  var sel = 'button.cell[data-id="' + id + '"][data-date="' + date + '"]';
+  refocus(els.weekGrid, sel);
+  latido(els.weekGrid.querySelector(sel));
 });
+
+/* Al cambiar de día, semana o mes, lo que cambió se reimprime en su lugar y
+   los números cuentan, en vez de que la pantalla entera se reemplace. */
+function cambiarDia(fn) {
+  var antes = { dots: foto(els.hoyList, '.dot'), filas: foto(els.hoyList, '.habit'), segs: foto(els.summary, '.seg'), n: ultimoHoy ? ultimoHoy.done : NaN };
+  fn();
+  renderHoy();
+  cambiarEnSuLugar(els.hoyList, '.dot', antes.dots);
+  cambiarEnSuLugar(els.hoyList, '.habit', antes.filas, '.check');
+  cambiarEnSuLugar(els.summary, '.seg', antes.segs);
+  if (ultimoHoy) contar(els.summary.querySelector('.big-n'), antes.n, ultimoHoy.done);
+}
+function cambiarSemana(fn) {
+  var antes = foto(els.weekGrid, '.cell');
+  fn();
+  renderSemana();
+  cambiarEnSuLugar(els.weekGrid, '.cell', antes);
+}
+function cambiarMes(fn) {
+  var antes = { dias: foto(els.monthBody, '.cal-dia'), tiras: foto(els.monthBody, '.tira i') };
+  fn();
+  renderMes();
+  cambiarEnSuLugar(els.monthBody, '.cal-dia', antes.dias);
+  cambiarEnSuLugar(els.monthBody, '.tira i', antes.tiras);
+}
 
 els.habitList.addEventListener('click', function (e) {
   var b = e.target.closest('button[data-act]');
@@ -785,33 +911,25 @@ els.habitList.addEventListener('click', function (e) {
     return;
   }
   if (act === 'del') {
-    if (state.confirmDel === id) {
+    // Se elimina al primer toque y queda "Deshacer" 5 segundos. Las marcas pasadas no se tocan.
+    var i = state.habits.findIndex(function (h) { return h.id === id; });
+    if (i < 0) return;
+    var gone = state.habits[i];
+    tachar(b.closest('.edit-row'), function () {
       state.habits = state.habits.filter(function (h) { return h.id !== id; });
-      state.confirmDel = null;
       persistHabits();
       renderHabitos(true);
-      say('Hábito eliminado.');
-    } else {
-      state.confirmDel = id;
-      renderHabitos(true);
-      refocus(els.habitList, 'button[data-act="del"][data-id="' + id + '"]');
-      clearTimeout(confirmTimer);
-      confirmTimer = setTimeout(function () {
-        if (state.confirmDel) { state.confirmDel = null; if (state.tab === 'habitos') renderHabitos(); }
-      }, 5000);
-    }
+      ofrecerDeshacer('Eliminaste «' + gone.name + '»', function () {
+        if (state.habits.some(function (h) { return h.id === id; })) return;
+        state.habits.splice(Math.min(i, state.habits.length), 0, gone);
+        persistHabits();
+        renderHabitos(true);
+        reaparecer(els.habitList.querySelector('.edit-row[data-hid="' + id + '"]'));
+      });
+    });
   }
 });
-document.addEventListener('click', function (e) {
-  if (state.confirmTask && !e.target.closest('button[data-tact="del"]')) {
-    state.confirmTask = null;
-    render();
-  }
-  if (state.confirmDel && !e.target.closest('button[data-act="del"]')) {
-    state.confirmDel = null;
-    if (state.tab === 'habitos') renderHabitos();
-  }
-});
+function habitoClave(n) { return n.dataset.hid; }
 
 els.habitList.addEventListener('change', function (e) {
   var t = e.target, id = t.dataset && t.dataset.id;
@@ -822,7 +940,14 @@ els.habitList.addEventListener('change', function (e) {
     var v = t.value.trim().slice(0, 60);
     if (v && v !== h.name) { h.name = v; persistHabits(); }
   } else if (t.dataset.role === 'cat') {
-    if (CATS.some(function (c) { return c.key === t.value; })) { h.cat = t.value; persistHabits(); }
+    // Al cambiar de categoría, el renglón viaja hasta su tarjeta nueva.
+    if (CATS.some(function (c) { return c.key === t.value; })) {
+      h.cat = t.value;
+      persistHabits();
+      reacomodar(els.habitList, '.edit-row', habitoClave, function () { renderHabitos(true); });
+      refocus(els.habitList, 'select[data-role="cat"][data-id="' + id + '"]');
+      return;
+    }
   } else if (t.dataset.role === 'freq') {
     var nf = freqFrom(t.value, h.freq);
     if (nf) h.freq = nf; else delete h.freq;
@@ -840,7 +965,7 @@ els.habitList.addEventListener('focusout', function () {
 els.addForm.addEventListener('submit', function (e) {
   e.preventDefault();
   var name = els.newName.value.trim().slice(0, 60);
-  if (!name) { els.newName.focus(); return; }
+  if (!name) { rechazar(els.newName, 'Poné un nombre, por ejemplo: Leer 20 minutos.'); return; }
   var nh = { id: makeId(), name: name, cat: els.newCat.value };
   var nfq = freqFrom(els.newFreq.value);
   if (nfq) nh.freq = nfq;
@@ -848,43 +973,46 @@ els.addForm.addEventListener('submit', function (e) {
   persistHabits();
   els.newName.value = '';
   els.newFreq.value = 'daily';
-  renderHabitos(true);
+  reacomodar(els.habitList, '.edit-row', habitoClave, function () { renderHabitos(true); });
   say('Hábito añadido a ' + CATS.find(function (c) { return c.key === els.newCat.value; }).label + '.');
 });
 
 els.prevDay.addEventListener('click', function () {
-  state.date = addDays(state.date, -1); state.followToday = false; renderHoy();
+  cambiarDia(function () { state.date = addDays(state.date, -1); state.followToday = false; });
 });
 els.nextDay.addEventListener('click', function () {
   if (state.date >= state.today) return;
-  state.date = addDays(state.date, 1); state.followToday = state.date === state.today; renderHoy();
+  cambiarDia(function () { state.date = addDays(state.date, 1); state.followToday = state.date === state.today; });
 });
 els.goToday.addEventListener('click', function () {
-  state.date = state.today; state.followToday = true; renderHoy();
+  cambiarDia(function () { state.date = state.today; state.followToday = true; });
 });
 els.prevWeek.addEventListener('click', function () {
-  state.weekStart = addDays(state.weekStart, -7); renderSemana();
+  cambiarSemana(function () { state.weekStart = addDays(state.weekStart, -7); });
 });
 els.nextWeek.addEventListener('click', function () {
   if (state.weekStart > weekStartOf(state.today)) return;
-  state.weekStart = addDays(state.weekStart, 7); renderSemana();
+  cambiarSemana(function () { state.weekStart = addDays(state.weekStart, 7); });
 });
 els.prevMonth.addEventListener('click', function () {
-  state.month = addMonths(state.month, -1); state.followMonth = false; renderMes();
+  cambiarMes(function () { state.month = addMonths(state.month, -1); state.followMonth = false; });
 });
 els.nextMonth.addEventListener('click', function () {
   if (state.month >= state.today.slice(0, 7)) return;
-  state.month = addMonths(state.month, 1); state.followMonth = state.month === state.today.slice(0, 7); renderMes();
+  cambiarMes(function () { state.month = addMonths(state.month, 1); state.followMonth = state.month === state.today.slice(0, 7); });
 });
 els.goThisMonth.addEventListener('click', function () {
-  state.month = state.today.slice(0, 7); state.followMonth = true; renderMes();
+  cambiarMes(function () { state.month = state.today.slice(0, 7); state.followMonth = true; });
 });
+/* Transformar: el día que tocás crece hasta ser la pantalla de Hoy. */
 els.monthBody.addEventListener('click', function (e) {
   var b = e.target.closest('button.cal-dia');
   if (!b || b.disabled) return;
-  state.date = b.dataset.date;
-  state.followToday = state.date === state.today;
-  setTab('hoy');
+  crecerHasta(b, function () {
+    state.date = b.dataset.date;
+    state.followToday = state.date === state.today;
+    setTab('hoy');
+  });
 });
 document.querySelectorAll('.tab').forEach(function (b) {
   b.addEventListener('click', function () { setTab(b.dataset.tab); });
@@ -1060,6 +1188,11 @@ function onData(data, meta) {
   var first = !state.ready;
   state.ready = true;
   if (key === state.dataKey && !first) { renderAccount(); return; }
+  // El eco de un cambio tuyo (la pantalla ya lo muestra): no se redibuja, así
+  // no se corta a la mitad lo que se está moviendo.
+  if (!first && stable([habits, logs, tasks]) === stable([state.habits, state.logs, state.tasks])) {
+    state.dataKey = key; renderAccount(); return;
+  }
   state.dataKey = key;
   state.habits = clone(habits);
   state.logs = clone(logs);
@@ -1078,12 +1211,17 @@ function onData(data, meta) {
     if (again) { again.value = typing.value; again.focus(); }
   }
   if (sel && document.activeElement !== a) refocus(document, sel);
-  if (first) offerMigration();
+  if (first) { encadenar(currentView()); offerMigration(); }
 }
 
 async function boot() {
   drawOrnaments();
   render();
+  luzQueSigue();
+  ejemplosQueSeEscriben(function () { return els.newName; },
+    ['Leer 20 minutos', 'Tomar sol 15 minutos', 'Ordenar el escritorio', 'Dormir 8 horas'], 'Nuevo hábito');
+  ejemplosQueSeEscriben(function () { return els.tasksSemana.querySelector('.tarea-nueva input'); },
+    ['Llamar al dentista', 'Pagar la tarjeta', 'Mandar el presupuesto', 'Comprar el regalo de Sofi'], 'Anotar un pendiente');
   try {
     store = await createStore();
   } catch (e) {
