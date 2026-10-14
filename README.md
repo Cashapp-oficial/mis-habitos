@@ -33,7 +33,9 @@ git push
 ```
 
 GitHub Pages lo publica solo en uno o dos minutos. Si cambiás la lista de
-archivos que necesita la app sin conexión, subí `VERSION` en `sw.js`.
+archivos que necesita la app sin conexión, subí `VERSION` en `sw.js`. Subila también en
+cada cambio que tenga que verse ya: con la versión nueva, la app abierta se
+recarga sola; sin subirla, el cambio aparece recién la vez siguiente que se abre.
 
 ## Probar en la compu
 

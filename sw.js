@@ -12,7 +12,7 @@
   Al cambiar la lista de archivos, subí VERSION para que se renueve la copia.
 */
 
-var VERSION = 'v7';
+var VERSION = 'v8';
 var SHELL = 'mis-habitos-shell-' + VERSION;
 var LIBS = 'mis-habitos-libs-v1';
 var FILES = [
@@ -22,7 +22,11 @@ var FILES = [
 ];
 
 self.addEventListener('install', function (event) {
-  event.waitUntil(caches.open(SHELL).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));
+  // cache: 'reload' saltea la copia de 10 minutos del navegador: si no, la
+  // versión nueva podía guardar archivos viejos.
+  event.waitUntil(caches.open(SHELL).then(function (c) {
+    return c.addAll(FILES.map(function (f) { return new Request(f, { cache: 'reload' }); }));
+  }).then(function () { return self.skipWaiting(); }));
 });
 
 self.addEventListener('activate', function (event) {
@@ -35,7 +39,7 @@ self.addEventListener('activate', function (event) {
 
 function cacheThenUpdate(event, request) {
   return caches.open(SHELL).then(function (cache) {
-    var network = fetch(request).then(function (res) {
+    var network = fetch(request, { cache: 'no-cache' }).then(function (res) {
       if (res.ok) return cache.put(request, res.clone()).then(function () { return res; });
       return res;
     });

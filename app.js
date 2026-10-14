@@ -1289,10 +1289,33 @@ async function boot() {
     startReminder();
   });
 }
+// Que no se sienta Chrome (14/10/2026): en el celular, mantener apretado un
+// link o una imagen abría el menú del navegador. Se frena salvo donde se
+// escribe (hace falta para pegar); en la compu el clic derecho sigue.
+var tactil = window.matchMedia('(hover: none)');
+document.addEventListener('contextmenu', function (e) {
+  if (!tactil.matches) return;
+  if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+  e.preventDefault();
+});
+
 boot();
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('sw.js').catch(function (e) { console.warn('Sin modo offline:', e); });
+    navigator.serviceWorker.register('sw.js').then(function (reg) {
+      // Al volver a la app, se fija si hay versión nueva.
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') reg.update().catch(function () { /* sin conexión */ });
+      });
+    }).catch(function (e) { console.warn('Sin modo offline:', e); });
+    // Si llega una versión nueva mientras está abierta, se recarga una vez
+    // (solo si ya había una versión antes, no la primera vez que se instala).
+    var habia = !!navigator.serviceWorker.controller, recargo = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!habia || recargo) return;
+      recargo = true;
+      location.reload();
+    });
   });
 }
