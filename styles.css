@@ -883,3 +883,57 @@ select.field option { background: #1b1b1d; color: var(--texto); }
 @media (prefers-reduced-motion: reduce) {
   .desliza-tira, .vidrio::after, .vidrio::before { transition: none; }
 }
+
+/* ---------- Los datos cambian, no saltan (pintar.js) ----------
+   Como pintar() deja en su lugar lo que no cambió, cada cosa puede pasar de
+   un estado al otro: los números ruedan o cuentan, y estos colores, rellenos
+   y bordes se funden. Los del calendario y las tiras, en ola (--i). */
+
+[data-num] { display: inline-block; }
+.big-n, .mes-n {
+  background: inherit;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* La tira del día: el relleno rayado avanza de izquierda a derecha. */
+.seg { position: relative; overflow: hidden; }
+.seg.done { background: var(--capa-3); }
+.seg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(-45deg, var(--c) 0 3px, color-mix(in srgb, var(--c) 78%, #000) 3px 4.5px);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.5s cubic-bezier(0.2, 0, 0, 1);
+}
+.seg.done::after { transform: none; }
+.seg { transition: box-shadow 0.4s; }
+
+.check { transition: background-color 0.35s, box-shadow 0.35s, border-color 0.35s, opacity 0.35s; }
+.check svg { transition: opacity 0.3s, transform 0.3s cubic-bezier(0.2, 0, 0, 1); }
+.x-btn { transition: background-color 0.35s, border-color 0.35s, color 0.35s; }
+.h-name, .tarea-texto { transition: color 0.35s; }
+.dot { transition: background-color 0.4s, box-shadow 0.4s, width 0.3s, height 0.3s, margin 0.3s; }
+.count { transition: color 0.4s; }
+.streak, .record, .semanal, .no-toca { transition: color 0.4s, opacity 0.4s; }
+.tarea-check { transition: background-color 0.35s; }
+.cell { transition: background-color 0.4s, border-color 0.4s, color 0.4s, opacity 0.4s; }
+.cell svg { transition: opacity 0.3s; }
+.dia { transition: background-color 0.3s, border-color 0.3s, color 0.3s; }
+
+.cal-dia {
+  transition: background-color 0.45s, border-color 0.45s, color 0.45s, box-shadow 0.45s, opacity 0.45s;
+  transition-delay: calc(var(--i, 0) * 10ms);
+}
+.tira i {
+  transition: background-color 0.45s, box-shadow 0.45s;
+  transition-delay: calc(var(--i, 0) * 8ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seg::after, .check, .check svg, .x-btn, .h-name, .tarea-texto, .dot, .count, .streak, .record, .semanal, .no-toca,
+  .tarea-check, .cell, .cell svg, .dia, .cal-dia, .tira i { transition: none; }
+}

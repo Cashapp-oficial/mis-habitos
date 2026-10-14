@@ -14,6 +14,7 @@ exactamente lo que se publica.
 | `index.html` | La estructura de las pantallas |
 | `styles.css` | La estética |
 | `app.js` | Las pantallas y los toques |
+| `pintar.js` | Redibuja cambiando solo lo distinto, para que los números rueden y los colores se fundan en vez de saltar |
 | `movimiento.js` | Las animaciones: deslizar, deshacer, el campo que dice que no, transformar, encadenar. Con `?lento` en la dirección van 4 veces más lento |
 | `store.js` | Dónde se guardan los datos: Firebase o, sin configurar, este navegador |
 | `datos.js` | Cuentas puras: rachas, pendientes, combinar respaldos, constancia mensual |

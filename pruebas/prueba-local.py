@@ -57,6 +57,10 @@ with sync_playwright() as p:
 
     page.reload()
     page.wait_for_selector(".habit")
+    try:  # al abrir, el número rueda desde 0 hasta su valor
+        page.wait_for_function("document.querySelector('.big').textContent.trim() === '2/10'", timeout=3000)
+    except Exception:
+        pass
     if page.text_content(".big").strip() != "2/10" or page.locator(".state-miss").count() != 1:
         falla("las marcas no sobrevivieron a recargar")
     ok("las marcas siguen después de recargar")
@@ -83,6 +87,11 @@ with sync_playwright() as p:
     page.keyboard.press("Enter")
     page.wait_for_selector("#tasksSemana .tarea >> nth=1")
     page.locator("#tasksSemana .tarea-check").first.click()
+    # El número rueda hasta el valor nuevo (pintar.js): se espera a que llegue.
+    try:
+        page.wait_for_function("document.querySelector('#tasksSemana .tareas-cab .count').textContent.trim() === '1/2'", timeout=3000)
+    except Exception:
+        pass
     if page.text_content("#tasksSemana .tareas-cab .count").strip() != "1/2":
         falla("los pendientes no cuentan 1/2")
     ok("anotar dos pendientes y tildar uno da 1/2")
@@ -169,6 +178,10 @@ with sync_playwright() as p:
     page.locator('.habit:has-text("Tomar 2 litros") .check').click()
     page.click("#goToday")
     fila = page.locator('.habit:has-text("Tomar 2 litros")')
+    try:  # el número de la racha rueda de 1 a 2
+        page.wait_for_function("[...document.querySelectorAll('.habit')].some(f => f.textContent.includes('Tomar 2 litros') && f.textContent.includes('racha 2 días'))", timeout=3000)
+    except Exception:
+        pass
     if "racha 2 días" not in fila.text_content() or fila.locator(".record.top").count() != 1:
         falla("con dos días seguidos no muestra 'racha 2 días' y 'tu récord': " + fila.text_content())
     ok("dos días seguidos: 'racha 2 días' y 'tu récord'")

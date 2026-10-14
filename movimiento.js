@@ -45,35 +45,40 @@ export function encadenar(vista) {
   });
 }
 
-/* ---------- Números que cuentan hasta el nuevo valor ---------- */
+/* ---------- Un número que cambia nunca salta ----------
+   De a poco (4 → 5): rueda como un cuentakilómetros, el viejo sale para
+   arriba y el nuevo entra desde abajo, un paso por vez. De a mucho
+   (0 → 67): cuenta, rápido al principio y frenando al llegar. */
 
-export function contar(el, de, a, fmt) {
-  fmt = fmt || String;
-  if (!el) return;
-  if (quieto() || de === a || isNaN(de)) { el.textContent = fmt(a); return; }
-  var t0 = performance.now(), d = 380 * S;
-  el.textContent = fmt(de);
+export function numeroHasta(el, de, a) {
+  var turno = {};
+  el._turno = turno;
+  el.getAnimations().forEach(function (x) { x.cancel(); });
+  if (quieto() || de === a) { el.textContent = a; return; }
+  if (Math.abs(a - de) > 3) { contarHasta(el, de, a, turno); return; }
+  var dir = a > de ? 1 : -1, v = de;
+  (function paso() {
+    if (el._turno !== turno || v === a) return;
+    v += dir;
+    var sale = animar(el, [{ transform: 'none', opacity: 1 }, { transform: 'translateY(' + (-dir * 55) + '%)', opacity: 0 }], 190,
+      { easing: 'cubic-bezier(0.4, 0, 1, 1)' });
+    alTerminar(sale, 190, function () {
+      if (el._turno !== turno) return;
+      el.textContent = v;
+      if (sale) sale.cancel();
+      var entra = animar(el, [{ transform: 'translateY(' + (dir * 55) + '%)', opacity: 0 }, { transform: 'none', opacity: 1 }], 320, { fill: 'none' });
+      alTerminar(entra, 320, paso);
+    });
+  })();
+}
+function contarHasta(el, de, a, turno) {
+  var t0 = performance.now(), d = 900 * S;
+  el.textContent = de;
   requestAnimationFrame(function paso(t) {
-    if (!el.isConnected) return;
+    if (el._turno !== turno || !el.isConnected) return;
     var p = Math.min(1, (t - t0) / d), k = 1 - Math.pow(1 - p, 3);
-    el.textContent = fmt(Math.round(de + (a - de) * k));
+    el.textContent = Math.round(de + (a - de) * k);
     if (p < 1) requestAnimationFrame(paso);
-  });
-}
-
-/* ---------- Cambiar en su lugar: cada celda que cambió se reimprime ---------- */
-
-export function foto(raiz, sel) {
-  return Array.prototype.map.call(raiz.querySelectorAll(sel), function (n) { return n.className; });
-}
-export function cambiarEnSuLugar(raiz, sel, antes, cual, frames) {
-  if (quieto() || !antes) return;
-  var j = 0;
-  raiz.querySelectorAll(sel).forEach(function (n, i) {
-    if (antes[i] === undefined || antes[i] === n.className) return;
-    var blanco = cual ? n.querySelector(cual) : n;
-    animar(blanco, frames || [{ opacity: 0, transform: 'scale(0.3)' }, { opacity: 1, transform: 'none' }], 340,
-      { delay: Math.min(j++, 24) * 14 * S, fill: 'backwards' });
   });
 }
 
@@ -91,11 +96,6 @@ export function entintar(check) {
   animar(check, [{ backgroundColor: 'transparent', boxShadow: 'inset 0 0 0 0 ' + c }, { backgroundColor: 'transparent', boxShadow: 'inset 0 0 0 24px ' + c }], 260, { fill: 'none' });
   var trazo = check.querySelector('path');
   if (trazo) animar(trazo, [{ strokeDasharray: 24, strokeDashoffset: 24 }, { strokeDasharray: 24, strokeDashoffset: 0 }], 240, { delay: 150 * S, fill: 'backwards' });
-}
-
-/* El número que cambia: el viejo se va hacia arriba y el nuevo sube desde abajo. */
-export function subirNumero(el) {
-  animar(el, [{ opacity: 0, transform: 'translateY(14px)' }, { opacity: 1, transform: 'none' }], 300, { fill: 'none' });
 }
 
 /* El día completo: el número cae como un sello (el único rebote permitido). */
@@ -124,11 +124,6 @@ export function ensenarGesto(fila, texto, clase) {
     fila.style.removeProperty('--dx');
     tira.remove();
   });
-}
-
-/* Un toque que se nota: lo que tocaste se hunde apenas y vuelve. */
-export function latido(el) {
-  animar(el, [{ transform: 'scale(0.86)' }, { transform: 'none' }], 240, { fill: 'none' });
 }
 
 /* El día completo: un anillo se abre una sola vez alrededor del número. */

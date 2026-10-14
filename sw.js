@@ -11,11 +11,11 @@
   Al cambiar la lista de archivos, subí VERSION para que se renueve la copia.
 */
 
-var VERSION = 'v5';
+var VERSION = 'v6';
 var SHELL = 'mis-habitos-shell-' + VERSION;
 var LIBS = 'mis-habitos-libs-v1';
 var FILES = [
-  './', './index.html', './styles.css', './app.js', './movimiento.js', './store.js', './datos.js', './fechas.js',
+  './', './index.html', './styles.css', './app.js', './movimiento.js', './pintar.js', './store.js', './datos.js', './fechas.js',
   './firebase-config.js', './manifest.webmanifest',
   './icons/favicon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/badge-96.png'
 ];
