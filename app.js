@@ -709,7 +709,7 @@ function setTab(t) {
   render();
   window.scrollTo(0, 0);
   alBajar();
-  if (state.ready) entrar(currentView());
+  if (state.ready && arranco) entrar(currentView());
 }
 /* Al entrar a una pestaña: las piezas en cadena y los números grandes cuentan desde cero. */
 function entrar(vista) {
@@ -723,7 +723,12 @@ function currentView() {
   return { hoy: els.viewHoy, semana: els.viewSemana, mes: els.viewMes, habitos: els.viewHabitos }[state.tab];
 }
 
+// Se recuerda qué se muestra, para no rearmar la pantalla (y repetir su
+// entrada) cuando la cuenta se confirma con lo mismo que ya está a la vista.
+var mostrandoLogin = null;
 function showLogin(on) {
+  if (on === mostrandoLogin) return;
+  mostrandoLogin = on;
   els.viewLogin.hidden = !on;
   els.tabbar.hidden = on;
   if (on) {
@@ -1207,7 +1212,8 @@ function onData(data, meta) {
     if (again) { again.value = typing.value; again.focus(); }
   }
   if (sel && document.activeElement !== a) refocus(document, sel);
-  if (!arranco) { arranco = true; entrar(currentView()); offerMigration(); }
+  // Al abrir la app, la pantalla aparece ya armada: sin entrada animada.
+  if (!arranco) { arranco = true; offerMigration(); }
   guardarCopia();
 }
 
@@ -1231,7 +1237,6 @@ function abrirConCopia() {
   state.ready = true;
   showLogin(false);
   arranco = true;
-  entrar(currentView());
 }
 
 async function boot() {
