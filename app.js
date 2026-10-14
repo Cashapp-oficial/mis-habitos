@@ -262,8 +262,8 @@ function renderHoy() {
     return;
   }
 
-  // Cuentan los que tocan ese día y los que hiciste igual.
-  var due = list.filter(function (h) { return counts(h, d); });
+  // Entran todos los hábitos, los hayas marcado o no y te toquen o no ese día.
+  var due = list;
   var done = 0, miss = 0, segs = '';
   due.forEach(function (h) {
     var v = val(d, h.id);
@@ -288,7 +288,7 @@ function renderHoy() {
     var hs = list.filter(function (h) { return h.cat === c.key; });
     if (!hs.length) return '';
     var n = hs.filter(function (h) { return val(d, h.id) === 1; }).length;
-    var nd = hs.filter(function (h) { return counts(h, d); }).length;
+    var nd = hs.length;
     return '<section class="cat vidrio cat-' + c.key + '" aria-labelledby="cat-' + c.key + '" data-key="' + c.key + '">' +
       '<header class="cat-head"><h2 id="cat-' + c.key + '">' + c.label + '</h2><span class="count' + (nd && n >= nd ? ' completa' : '') + '"><span data-num>' + n + '</span>/' + nd + '</span></header>' +
       '<ul class="habits">' + hs.map(function (h) { return habitRow(h, d); }).join('') + '</ul></section>';
@@ -1067,10 +1067,9 @@ function renderReminder() {
   els.remOn.checked = reminder.enabled;
   if (document.activeElement !== els.remTime) els.remTime.value = reminder.time;
   var st = notifState(), msg;
-  var off = !vapidKey || st === 'unsupported' || st === 'denied';
+  var off = st === 'unsupported' || st === 'denied';
   els.remOn.disabled = off && !reminder.enabled;
-  if (!vapidKey) msg = 'Falta configurar los avisos en Firebase.';
-  else if (st === 'unsupported') msg = isIOS() ? 'En iPhone los avisos funcionan con la app instalada: Compartir › Agregar a inicio, y activalos desde ahí.' : 'Este navegador no puede mostrar avisos.';
+  if (st === 'unsupported') msg = isIOS() ? 'En iPhone los avisos funcionan con la app instalada: Compartir › Agregar a inicio, y activalos desde ahí.' : 'Este navegador no puede mostrar avisos.';
   else if (st === 'denied') msg = 'Las notificaciones están bloqueadas para este sitio. Activalas en los ajustes del navegador y volvé a intentar.';
   else if (!reminder.enabled) msg = 'Apagado.';
   else if (device.busy) msg = 'Registrando este aparato…';
@@ -1107,7 +1106,7 @@ function startReminder() {
     renderReminder();
     // Si ya está activado y este aparato dio permiso, se renueva su registro
     // en silencio una vez por sesión (el token puede cambiar con el tiempo).
-    if (r.enabled && vapidKey && notifState() === 'granted' && !device.tried) registerDevice(true);
+    if (r.enabled && notifState() === 'granted' && !device.tried) registerDevice(true);
   });
 }
 
@@ -1118,7 +1117,7 @@ els.remOn.addEventListener('change', async function () {
     renderReminder();
     return;
   }
-  if (!vapidKey || notifState() === 'unsupported') { els.remOn.checked = false; renderReminder(); return; }
+  if (notifState() === 'unsupported') { els.remOn.checked = false; renderReminder(); return; }
   var perm = await Notification.requestPermission();
   if (perm !== 'granted') {
     els.remOn.checked = false;
@@ -1208,7 +1207,31 @@ function onData(data, meta) {
     if (again) { again.value = typing.value; again.focus(); }
   }
   if (sel && document.activeElement !== a) refocus(document, sel);
-  if (first) { entrar(currentView()); offerMigration(); }
+  if (!arranco) { arranco = true; entrar(currentView()); offerMigration(); }
+  guardarCopia();
+}
+
+/* Al abrir, la app dibuja al instante lo último que viste en este aparato y
+   después lo pone al día con la nube, que tarda unos segundos en conectar. */
+var COPIA = 'mh:ultimo';
+var arranco = false;
+function guardarCopia() {
+  if (!store || store.mode !== 'cloud' || !state.user) return;
+  try {
+    localStorage.setItem(COPIA, JSON.stringify({ user: state.user, habits: state.habits, logs: state.logs, tasks: state.tasks }));
+  } catch (e) { /* sin lugar: la próxima vez abre sin la copia */ }
+}
+function borrarCopia() { try { localStorage.removeItem(COPIA); } catch (e) { /* nada */ } }
+function abrirConCopia() {
+  var c;
+  try { c = JSON.parse(localStorage.getItem(COPIA) || 'null'); } catch (e) { c = null; }
+  if (!c || !c.user || !c.user.uid || !Array.isArray(c.habits) || !c.logs || !c.tasks) return;
+  state.user = c.user;
+  state.habits = c.habits; state.logs = c.logs; state.tasks = c.tasks;
+  state.ready = true;
+  showLogin(false);
+  arranco = true;
+  entrar(currentView());
 }
 
 async function boot() {
@@ -1219,6 +1242,7 @@ async function boot() {
     ['Leer 20 minutos', 'Tomar sol 15 minutos', 'Ordenar el escritorio', 'Dormir 8 horas'], 'Nuevo hábito');
   ejemplosQueSeEscriben(function () { return els.tasksSemana.querySelector('.tarea-nueva input'); },
     ['Llamar al dentista', 'Pagar la tarjeta', 'Mandar el presupuesto', 'Comprar el regalo de Sofi'], 'Anotar un pendiente');
+  abrirConCopia();
   try {
     store = await createStore();
   } catch (e) {
@@ -1233,6 +1257,7 @@ async function boot() {
     state.user = user;
     if (!user) {
       store.stop();
+      borrarCopia(); arranco = false;
       state.ready = false; state.habits = []; state.logs = {}; state.tasks = {}; state.dataKey = ''; migrationAsked = false;
       // Que no quede nada de la cuenta anterior dibujado en las vistas ocultas.
       els.summary.innerHTML = els.tasksHoy.innerHTML = els.tasksSemana.innerHTML = els.hoyList.innerHTML = els.weekGrid.innerHTML = els.monthBody.innerHTML = els.habitList.innerHTML = '';
@@ -1242,7 +1267,12 @@ async function boot() {
       return;
     }
     showLogin(false);
-    if (prevUid === user.uid) return;
+    if (prevUid === user.uid && state.dataKey) return;
+    if (prevUid && prevUid !== user.uid) {
+      // La copia era de otra cuenta: no se muestra.
+      state.ready = false; state.habits = []; state.logs = {}; state.tasks = {}; arranco = false;
+      render();
+    }
     store.stop();
     device = { token: null, busy: false, failed: false, tried: false };
     store.start(onData, function (e) {

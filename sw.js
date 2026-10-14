@@ -2,8 +2,9 @@
   Service worker: guarda la app en el aparato para que abra sin conexión.
   Tus datos no pasan por acá: los guarda y sincroniza Firestore por su cuenta.
 
-  - Archivos de la app: primero la red (así ves siempre la última versión) y,
-    si no hay conexión o tarda más de 3 segundos, la copia guardada.
+  - Archivos de la app: la copia guardada al instante (así abre rápido) y,
+    por detrás, se baja la última versión, que se ve la próxima vez que abrís.
+    Si todavía no hay copia, de la red.
   - Firebase (gstatic) y las fuentes: la copia guardada primero, porque esas
     direcciones llevan la versión adentro y nunca cambian.
   - Todo lo demás (la base, el inicio de sesión) pasa directo.
@@ -11,7 +12,7 @@
   Al cambiar la lista de archivos, subí VERSION para que se renueve la copia.
 */
 
-var VERSION = 'v6';
+var VERSION = 'v7';
 var SHELL = 'mis-habitos-shell-' + VERSION;
 var LIBS = 'mis-habitos-libs-v1';
 var FILES = [
@@ -32,22 +33,19 @@ self.addEventListener('activate', function (event) {
   );
 });
 
-function networkFirst(request) {
+function cacheThenUpdate(event, request) {
   return caches.open(SHELL).then(function (cache) {
     var network = fetch(request).then(function (res) {
-      if (res.ok) cache.put(request, res.clone());
+      if (res.ok) return cache.put(request, res.clone()).then(function () { return res; });
       return res;
     });
-    var timeout = new Promise(function (resolve) { setTimeout(resolve, 3000); });
-    var fallback = function () {
-      return cache.match(request, { ignoreSearch: true }).then(function (hit) {
-        if (hit) return hit;
-        if (request.mode === 'navigate') return cache.match('./index.html');
-        return network;
+    event.waitUntil(network.catch(function () { /* sin conexión: queda la copia */ }));
+    return cache.match(request, { ignoreSearch: true }).then(function (hit) {
+      if (hit) return hit;
+      return network.catch(function () {
+        return request.mode === 'navigate' ? cache.match('./index.html') : Response.error();
       });
-    };
-    return Promise.race([network, timeout.then(function () { return null; })])
-      .then(function (res) { return res || fallback(); }, fallback);
+    });
   });
 }
 
@@ -67,7 +65,7 @@ self.addEventListener('fetch', function (event) {
   if (req.method !== 'GET') return;
   var url = new URL(req.url);
   if (url.origin === self.location.origin) {
-    event.respondWith(networkFirst(req));
+    event.respondWith(cacheThenUpdate(event, req));
   } else if (
     (url.hostname === 'www.gstatic.com' && url.pathname.indexOf('/firebasejs/') === 0) ||
     url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com'

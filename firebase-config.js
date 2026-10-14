@@ -19,7 +19,7 @@
 
   vapidKey: la clave pública de los avisos (Configuración del proyecto ›
   Cloud Messaging › Certificados push web). Tampoco es secreta. Mientras sea
-  null, el recordatorio diario aparece como "falta configurar".
+  null se usa la que Firebase trae por defecto, que alcanza.
 */
 export const firebaseConfig = {
   apiKey: "AIzaSyAOdQl6a6XF8G_Hox1GRJQBwsBy3r6j1ZI",
